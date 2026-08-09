@@ -609,8 +609,9 @@
   function drawHud(game, t) {
     var run = game.run, lv = game.level;
 
-    // ambience toggles, tucked into the bottom corners
+    // toggles + setup, tucked along the bottom edge clear of the power bar
     button("glass", 4, 212, 46, 11, "GLASS", game.glass || game.hover === "glass", 5);
+    button("setup", BW - 106, 212, 52, 11, "HELPERS", game.hover === "setup", 5);
     button("trip", BW - 50, 212, 46, 11, "TRIP", game.trip || game.hover === "trip", 5);
 
     text("LVL " + (run.levelIndex + 1) + "/3", 18, 8, 7, PAL.dim);
@@ -690,6 +691,46 @@
     text("stumble on when ready", BW / 2, 190, 5, PAL.dim, "center");
   }
 
+  /** TABLE SETUP: pick which helpers sit on the felt. Applies live. */
+  function drawSetup(game, t) {
+    bctx.fillStyle = "rgba(8,6,12,0.66)";
+    bctx.fillRect(0, 0, BW, BH);
+
+    var list = (root.Game && root.Game._test.HELPERS) || [];
+    var max = (root.Game && root.Game._test.HELPER_MAX) || 2;
+    var chosen = game.run.helpers || [];
+
+    text("TABLE SETUP", BW / 2, 12, 11, PAL.accent, "center");
+    text("what's on the felt  ·  " + chosen.length + "/" + max + " picked",
+      BW / 2, 30, 6, chosen.length >= max ? PAL.accent : PAL.dim, "center");
+
+    for (var i = 0; i < list.length; i++) {
+      var h = list[i];
+      var on = chosen.indexOf(h.key) >= 0;
+      var x = 24 + (i % 2) * 180, y = 46 + Math.floor(i / 2) * 52;
+      var hot = game.hover === "help" + i;
+      fill(x, y, 172, 46, on ? PAL.cardHi : PAL.card);
+      fill(x, y, 172, 1, on ? PAL.ok : PAL.railLight);
+      fill(x, y + 45, 172, 1, PAL.railDark);
+      fill(x, y, 1, 46, on ? PAL.ok : PAL.railLight);
+      fill(x + 171, y, 1, 46, PAL.railDark);
+      buttons.push({ id: "help" + i, x: x, y: y, w: 172, h: 46 });
+
+      // checkbox
+      fill(x + 7, y + 7, 9, 9, "#0b0f14");
+      pixRing(x + 11, y + 11, 4, on ? PAL.ok : PAL.dim);
+      if (on) { fill(x + 10, y + 12, 2, 2, PAL.ok); fill(x + 12, y + 9, 2, 3, PAL.ok); }
+
+      text(h.name, x + 22, y + 7, 6, on ? PAL.ok : (hot ? PAL.accent : PAL.text));
+      text(h.blurb, x + 22, y + 21, 5, PAL.dim);
+      text(h.blurb2, x + 22, y + 30, 5, PAL.dim);
+    }
+
+    button("setupRoll", 24, 154, 100, 16, "REROLL SPOTS", game.hover === "setupRoll", 6);
+    button("setupDone", BW - 124, 154, 100, 16, "BACK TO PLAY", game.hover === "setupDone", 6);
+    text("changes apply immediately  ·  M or ESC to close", BW / 2, 182, 5, PAL.dim, "center");
+  }
+
   function drawEnd(game, t) {
     dimWorld();
     if (game.state === "win") {
@@ -721,6 +762,7 @@
     drawBackdrop(t, game.glass ? 2.1 : 1);
 
     var inWorld = game.state === "play" || game.state === "shop" ||
+                  game.state === "setup" ||
                   game.state === "over" || game.state === "win";
     if (inWorld) {
       drawTable(game, t);
@@ -731,6 +773,7 @@
     }
     if (game.state === "title") drawTitle(game, t);
     if (game.state === "shop") drawShop(game);
+    if (game.state === "setup") drawSetup(game, t);
     if (game.state === "over" || game.state === "win") drawEnd(game, t);
 
     // blit with drunkenness

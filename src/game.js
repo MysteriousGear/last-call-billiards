@@ -19,6 +19,18 @@
   // honestly and the geometry closes in as the night goes on.
   var CHASER_EVERY = 4, DRUNK_BASE = 0.1, DRUNK_STEP = 0.35, DRUNK_MAX = 1.3;
 
+  // Cat: a nudge, not a shot. Only goes for the pot from inside CAT_COMMIT px.
+  var CAT_NUDGE = 26, CAT_NUDGE_VAR = 22, CAT_COMMIT = 52;
+
+  // At most two helpers on the table at once (for now).
+  var HELPER_MAX = 2;
+  var HELPERS = [
+    { key: "euclid", name: "FLAT PATCH", blurb: "a calm island where", blurb2: "geometry behaves" },
+    { key: "bridge", name: "BRIDGE",     blurb: "railed corridor aimed", blurb2: "at a pocket" },
+    { key: "crane",  name: "CRANE",      blurb: "dock a ball, the claw", blurb2: "drops it in. once" },
+    { key: "cat",    name: "BAR CAT",    blurb: "nudges one ball into", blurb2: "a better spot. once" },
+  ];
+
   var SPECIALS = {
     cash:       { msg: "tip jar ball! +$25" },
     extraShot:  { msg: "one on the house! +1 shot" },
@@ -135,6 +147,7 @@
       money: 0, levelIndex: 0, shots: 0, shotsFired: 0,
       items: {}, aimLen: 110, pocketBonus: 0, soberSips: 0,
       shotBonus: 0, potBonus: 0, mercyUsed: false,
+      helpers: randomHelperSet(), helpersLocked: false,
     };
     buildLevel(0);
     game.state = "play";
@@ -175,12 +188,10 @@
       portals: [],
       railMouth: 0,
       zones: [],
-      crane: Math.random() < 0.6 ? {
-        x: RECT.x + RECT.w * (0.28 + Math.random() * 0.3),
-        y: RECT.y + RECT.h * (0.25 + Math.random() * 0.5),
-        r: 7, used: false,
-      } : null,
+      crane: null,
+      catAllowed: false,
       catDone: false,
+      craneUsed: false,
     };
     game.craneAnim = null;
     game.cat = null;
@@ -214,8 +225,11 @@
       candidates.splice(bi, 1)[0].special = tier.splice(si, 1)[0];
     }
 
-    // zones last: they need the final ball positions to route around
-    world.zones = makeZones(idx, world);
+    // Helpers last: they need the final ball positions to route around.
+    // The set is rolled randomly per level until the player edits it in the
+    // TABLE SETUP menu, after which their choice sticks for the rest of the run.
+    if (!game.run.helpersLocked) game.run.helpers = randomHelperSet();
+    applyHelpers(world, game.run.helpers);
 
     if (def.portals) spawnPortals(world);
 
@@ -230,19 +244,38 @@
    * geometry is honest-to-goodness euclidean. A stranded cue ball can be
    * threaded through one of these to cross drunk space in a straight line.
    */
-  function makeZones(idx, world) {
-    var zones = [];
-    var count = idx === 0 ? 1 : 2;
-    for (var i = 0; i < count; i++) {
-      var want = idx > 0 && i === 0;   // later levels always get one bridge
+  function randomHelperSet() {
+    var pool = HELPERS.map(function (h) { return h.key; });
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    return pool.slice(0, HELPER_MAX);
+  }
+
+  /**
+   * Put exactly the chosen helpers on the table. Safe to call mid-level —
+   * the setup menu calls it live on every toggle. Per-level "already spent"
+   * flags survive, so toggling the crane or cat off and on is not a refill.
+   */
+  function applyHelpers(world, keys) {
+    world.zones = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (k !== "euclid" && k !== "bridge") continue;
       var z = null;
       for (var t = 0; t < 24 && !z; t++) {
-        var cand = want ? bridgeToPocket(world) : euclidPatch();
-        if (!zoneBlocked(cand, world, zones)) z = cand;
+        var cand = k === "bridge" ? bridgeToPocket(world) : euclidPatch();
+        if (!zoneBlocked(cand, world, world.zones)) z = cand;
       }
-      if (z) zones.push(z);
+      if (z) world.zones.push(z);
     }
-    return zones;
+    world.crane = keys.indexOf("crane") >= 0 ? {
+      x: RECT.x + RECT.w * (0.28 + Math.random() * 0.3),
+      y: RECT.y + RECT.h * (0.25 + Math.random() * 0.5),
+      r: 7, used: world.craneUsed,
+    } : null;
+    world.catAllowed = keys.indexOf("cat") >= 0;
   }
 
   /**
@@ -614,6 +647,37 @@
     else if (id && id.indexOf("item") === 0 && game.state === "shop") buyItem(+id.slice(4));
     else if (id === "glass") toggleGlass();
     else if (id === "trip") toggleTrip();
+    else if (id === "setup") openSetup();
+    else if (id === "setupDone") closeSetup();
+    else if (id === "setupRoll") {
+      game.run.helpers = randomHelperSet();
+      game.run.helpersLocked = true;
+      applyHelpers(game.world, game.run.helpers);
+      SFX.buy();
+    }
+    else if (id && id.indexOf("help") === 0) toggleHelper(HELPERS[+id.slice(4)].key);
+  }
+
+  function openSetup() {
+    if (game.state !== "play") return;
+    game.prevState = game.state;
+    game.state = "setup";
+    game.aim.active = false;
+    game.aim.trace = null;
+  }
+  function closeSetup() { if (game.state === "setup") game.state = "play"; }
+
+  /** Live toggle: the table behind the menu updates on every click. */
+  function toggleHelper(key) {
+    var set = game.run.helpers.slice();
+    var at = set.indexOf(key);
+    if (at >= 0) set.splice(at, 1);
+    else if (set.length >= HELPER_MAX) { SFX.nope(); return; }
+    else set.push(key);
+    game.run.helpers = set;
+    game.run.helpersLocked = true;
+    applyHelpers(game.world, set);
+    SFX.buy();
   }
 
   function toggleGlass() {
@@ -661,6 +725,7 @@
       if (b.color === "eight" && colorsLeft() > 0) continue;
       if (Math.hypot(b.x - cr.x, b.y - cr.y) > cr.r + b.r) continue;
       cr.used = true;
+      game.world.craneUsed = true;   // survives helper-menu toggling
       if (!shot) shot = { scratched: false, eightSunk: false, potted: [] };
       b.sunk = true; b.vx = 0; b.vy = 0;   // off the table while airborne
       var pk = nearestPocket(b.x, b.y);
@@ -685,19 +750,21 @@
         var b = cat.ball;
         if (!b.sunk) {
           if (!shot) shot = { scratched: false, eightSunk: false, potted: [] };
-          var sp = 150 + Math.random() * 60;
-          b.vx = cat.dir.x * sp;
-          b.vy = cat.dir.y * sp;
+          b.vx = cat.dir.x * cat.speed;
+          b.vy = cat.dir.y * cat.speed;
           SFX.meow();
-          say("the cat helps. sort of.", Render.PAL.ok, 2400);
+          say(cat.commit ? "the cat sinks it. smug."
+                         : "the cat improves your position", Render.PAL.ok, 2400);
         }
       }
       if (tNow - cat.t0 > 2.4) game.cat = null;
       return;
     }
-    if (game.world.catDone || shot !== null || game.craneAnim) return;
+    // strictly once per level: catDone latches the moment it is summoned
+    if (game.world.catDone || !game.world.catAllowed) return;
+    if (shot !== null || game.craneAnim) return;
     if (Phys.anyMoving(game.world)) return;
-    if (Math.random() > dt / 45) return;
+    if (Math.random() > dt / 40) return;
 
     // pick a target: any color ball, else the lone 8-ball
     var pool = game.world.balls.filter(function (b) {
@@ -711,13 +778,20 @@
     var pk = nearestPocket(ball.x, ball.y);
     var dx = pk.x - ball.x, dy = pk.y - ball.y;
     var dd = Math.hypot(dx, dy) || 1;
-    var jitter = (Math.random() - 0.5) * 0.24;   // it's a cat, not a pro
+
+    // A cat is not a cue. It taps the ball a short way toward the hole to
+    // leave you a better position — unless the ball is already sitting on
+    // the lip, in which case it might as well finish the job.
+    var commit = dd < CAT_COMMIT;
+    var travel = commit ? dd + 14 : CAT_NUDGE + Math.random() * CAT_NUDGE_VAR;
+    var speed = Math.sqrt(2 * Phys.FRICTION * travel);
+    var jitter = (Math.random() - 0.5) * (commit ? 0.10 : 0.34);
     var cs = Math.cos(jitter), sn = Math.sin(jitter);
     var dir = { x: (dx * cs - dy * sn) / dd, y: (dx * sn + dy * cs) / dd };
 
     game.world.catDone = true;
     game.cat = {
-      ball: ball, dir: dir, t0: tNow, armed: true,
+      ball: ball, dir: dir, speed: speed, commit: commit, t0: tNow, armed: true,
       x: ball.x - dir.x * 14, y: ball.y - dir.y * 14,
     };
   }
@@ -768,7 +842,10 @@
   }
 
   // test hook: lets the headless harness exercise level generation
-  root.Game = { _test: { makeZones: makeZones, pocketSet: pocketSet, RECT: RECT, BALL_R: BALL_R } };
+  root.Game = { _test: { applyHelpers: applyHelpers, pocketSet: pocketSet,
+                         RECT: RECT, BALL_R: BALL_R, HELPERS: HELPERS,
+                         HELPER_MAX: HELPER_MAX,
+                         state: function () { return game; } } };
 
   /* ── boot ────────────────────────────────────────────────────────────── */
 
@@ -792,10 +869,14 @@
         clearLevel();       // same path as a real clear: pays out, opens the shop
       } else if (k === "t") toggleGlass();
       else if (k === "c") toggleTrip();
+      else if (k === "m" || k === "escape") {
+        if (game.state === "setup") closeSetup(); else openSetup();
+      }
     });
     game.run = { money: 0, levelIndex: 0, shots: 0, shotsFired: 0, items: {},
                  aimLen: 110, pocketBonus: 0, soberSips: 0, shotBonus: 0,
-                 potBonus: 0, mercyUsed: false };
+                 potBonus: 0, mercyUsed: false,
+                 helpers: randomHelperSet(), helpersLocked: false };
     game.baseWarp = LEVELS[0].warp;
     requestAnimationFrame(frame);
   });

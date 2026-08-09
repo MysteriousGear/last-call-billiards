@@ -101,12 +101,33 @@ physics itself:
 | **Euclidean patch** | pale dashed rectangle where geometry is flat: balls travel straight until they exit; the grid inside is visibly still |
 | **Bridge** | wooden causeway, euclidean deck, railings on the long edges that balls bounce off. Its long axis is **aimed at a pocket** and its far end stops ~24px short, so riding the corridor leaves you pointed at the hole with one stretch of drunk space still to survive — measured ~66% pot rate over sloppy entries at high warp |
 | **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
-| **Bar cat** | once per level, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, paws a color ball (or the lone 8-ball) toward the nearest pocket, then fades out the same way. It aims straight; drunk space may disagree |
+| **Bar cat** | at most **once per level**, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, and **taps** a ball toward the nearest pocket, then fades out the same way |
 
-Level 1 gets one zone; levels 2–3 get a bridge plus a patch. The crane dock
-appears with 60% probability. Zones affect the aim tracer identically to
-the physics (the preview stays honest), and cat/crane pots pay out like any
-other pot.
+The cat is a nudge, not a cue: a swipe carries the ball only 26–48px to
+improve your position, with a loose ±0.17rad aim. Only when the ball is
+already within `CAT_COMMIT` (52px) of a pocket does it commit — enough
+speed to reach, tight aim — and actually try to sink it.
+
+Zones affect the aim tracer identically to the physics (the preview stays
+honest), and cat/crane pots pay out like any other pot.
+
+### Choosing the helpers — TABLE SETUP menu
+
+At most **two** helpers are on the felt at once (`HELPER_MAX`). Each level
+rolls a random pair, but the player can open **TABLE SETUP** (HELPERS button
+in the HUD, or `M` / `Esc`) and pick exactly which two they want from the
+four. Notes:
+
+- Changes apply **live** — the table behind the dimmed menu updates on every
+  toggle. Selecting past the cap is refused with a buzz rather than silently
+  dropping an earlier pick.
+- **REROLL SPOTS** re-randomizes placement of the current selection.
+- Once the player edits the set it is **locked** for the rest of the run
+  (`helpersLocked`), so their choice survives level transitions instead of
+  being re-randomized.
+- Per-level "already spent" flags (`craneUsed`, `catDone`) live on the world
+  and survive toggling, so switching a helper off and on again is not a
+  refill.
 
 ### Ambience toggles
 
@@ -120,6 +141,7 @@ Two toggles, as HUD corner buttons (mobile) and keys (desktop):
   Pockets keep their rims, the warp tint and grid stay faint but readable.
 - **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
   whole world layer. HUD text stays sober.
+- **HELPERS** (`M` / `Esc`): opens the TABLE SETUP menu above.
 
 ### Ambience
 
