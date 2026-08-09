@@ -57,9 +57,9 @@ game cheating.
 
 | Level | Name | Colors | Warp bumps | Warp scale | Shots | Specials | Extras |
 |---|---|---|---|---|---|---|---|
-| 1 | HAPPY HOUR | 3 | 2 | 0.45 | 10 | 1 (simple) | honest rendering, mild grid warp |
-| 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | grid swims |
-| 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | portal pair, screen wobble, double vision |
+| 1 | HAPPY HOUR | 3 | 2 | 0.45 | 10 | 1 (simple) | no helpers, honest rendering, mild grid warp |
+| 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | 1 helper, grid swims |
+| 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | 2 helpers, portal pair, screen wobble, double vision |
 
 ### Special balls
 
@@ -120,18 +120,34 @@ speed to reach, tight aim — and actually try to sink it.
 Zones affect the aim tracer identically to the physics (the preview stays
 honest), and cat/crane pots pay out like any other pot.
 
+### Helper allowance per level
+
+Helpers arrive with the difficulty, so the first table is a pure test of the
+geometry:
+
+| Level | Helpers |
+|---|---|
+| 1 — HAPPY HOUR | **0** — bare table |
+| 2 — DOUBLE SHOT | **1**, rolled at random |
+| 3 — LAST CALL | **2**, rolled at random |
+
+`HELPER_MAX` (2) is the hard ceiling; `HELPER_ALLOWANCE` holds the per-level
+figures and clamps to the ceiling for any level beyond the third.
+
 ### Choosing the helpers — TABLE SETUP menu (dev only)
 
-At most **two** helpers are on the felt at once (`HELPER_MAX`). Each level
-rolls a random pair. In **dev mode only** (`D`), a HELPERS button appears in
-the HUD — `M` / `Esc` also work — opening **TABLE SETUP**, where the player
-picks exactly which two they want from the four. Outside dev mode the button
-is not drawn and the keys do nothing. Notes:
+In **dev mode only** (`D`), a HELPERS button appears in the HUD — `M` / `Esc`
+also work — opening **TABLE SETUP**, where the player picks exactly which
+helpers they want from the four, up to `HELPER_MAX`. Outside dev mode the
+button is not drawn and the keys do nothing. As a dev override it may exceed
+the level's natural allowance; the menu shows what the level normally allows
+and flags `(OVERRIDDEN)` when the selection is above it. Notes:
 
 - Changes apply **live** — the table behind the dimmed menu updates on every
   toggle. Selecting past the cap is refused with a buzz rather than silently
   dropping an earlier pick.
-- **REROLL SPOTS** re-randomizes placement of the current selection.
+- **REROLL SPOTS** re-randomizes where the current selection sits on the
+  felt, without changing which helpers are picked.
 - Once the player edits the set it is **locked** for the rest of the run
   (`helpersLocked`), so their choice survives level transitions instead of
   being re-randomized.

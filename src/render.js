@@ -716,14 +716,19 @@
     bctx.fillStyle = "rgba(8,6,12,0.66)";
     bctx.fillRect(0, 0, BW, BH);
 
-    var list = (root.Game && root.Game._test.HELPERS) || [];
-    var max = (root.Game && root.Game._test.HELPER_MAX) || 2;
+    var api = root.Game ? root.Game._test : null;
+    var list = (api && api.HELPERS) || [];
+    var max = (api && api.HELPER_MAX) || 2;
+    var allow = api ? api.helperAllowance(game.run.levelIndex) : max;
     var chosen = game.run.helpers || [];
 
     text("TABLE SETUP", BW / 2, 12, 11, PAL.accent, "center");
     text("dev tool", BW / 2, 200, 5, PAL.danger, "center");
     text("what's on the felt  ·  " + chosen.length + "/" + max + " picked",
       BW / 2, 30, 6, chosen.length >= max ? PAL.accent : PAL.dim, "center");
+    text("level " + (game.run.levelIndex + 1) + " normally allows " + allow +
+         (chosen.length > allow ? "  (OVERRIDDEN)" : ""),
+      BW / 2, 191, 5, chosen.length > allow ? PAL.danger : PAL.dim, "center");
 
     for (var i = 0; i < list.length; i++) {
       var h = list[i];

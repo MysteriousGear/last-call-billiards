@@ -27,8 +27,14 @@
   var BRIDGE_TILT = Math.PI / 6;   // 30°
   var BRIDGE_GAP = 24;
 
-  // At most two helpers on the table at once (for now).
+  // Helpers arrive with the difficulty: none on the first table, one on the
+  // second, two on the third. HELPER_MAX is the hard ceiling (and what the
+  // dev menu may override up to).
+  var HELPER_ALLOWANCE = [0, 1, 2];
   var HELPER_MAX = 2;
+  function helperAllowance(idx) {
+    return HELPER_ALLOWANCE[Math.min(idx, HELPER_ALLOWANCE.length - 1)];
+  }
   var HELPERS = [
     { key: "euclid", name: "FLAT PATCH", blurb: "a calm island where", blurb2: "geometry behaves" },
     { key: "bridge", name: "BRIDGE",     blurb: "railed corridor aimed", blurb2: "at a pocket" },
@@ -152,7 +158,7 @@
       money: 0, levelIndex: 0, shots: 0, shotsFired: 0,
       items: {}, aimLen: 110, pocketBonus: 0, soberSips: 0,
       shotBonus: 0, potBonus: 0, mercyUsed: false,
-      helpers: randomHelperSet(), helpersLocked: false,
+      helpers: randomHelperSet(helperAllowance(0)), helpersLocked: false,
     };
     buildLevel(0);
     game.state = "play";
@@ -231,9 +237,10 @@
     }
 
     // Helpers last: they need the final ball positions to route around.
-    // The set is rolled randomly per level until the player edits it in the
-    // TABLE SETUP menu, after which their choice sticks for the rest of the run.
-    if (!game.run.helpersLocked) game.run.helpers = randomHelperSet();
+    // The set is rolled to this level's allowance until the player overrides
+    // it in the dev TABLE SETUP menu, after which their choice sticks.
+    if (!game.run.helpersLocked)
+      game.run.helpers = randomHelperSet(helperAllowance(idx));
     applyHelpers(world, game.run.helpers);
 
     if (def.portals) spawnPortals(world);
@@ -249,13 +256,14 @@
    * geometry is honest-to-goodness euclidean. A stranded cue ball can be
    * threaded through one of these to cross drunk space in a straight line.
    */
-  function randomHelperSet() {
+  function randomHelperSet(n) {
+    if (!n) return [];
     var pool = HELPERS.map(function (h) { return h.key; });
     for (var i = pool.length - 1; i > 0; i--) {
       var j = Math.floor(Math.random() * (i + 1));
       var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
     }
-    return pool.slice(0, HELPER_MAX);
+    return pool.slice(0, Math.min(n, HELPER_MAX));
   }
 
   /**
@@ -690,9 +698,7 @@
     else if (id === "trip") toggleTrip();
     else if (id === "setup") openSetup();
     else if (id === "setupDone") closeSetup();
-    else if (id === "setupRoll") {
-      game.run.helpers = randomHelperSet();
-      game.run.helpersLocked = true;
+    else if (id === "setupRoll") {   // same helpers, new places on the felt
       applyHelpers(game.world, game.run.helpers);
       SFX.buy();
     }
@@ -886,6 +892,8 @@
   root.Game = { _test: { applyHelpers: applyHelpers, pocketSet: pocketSet,
                          RECT: RECT, BALL_R: BALL_R, HELPERS: HELPERS,
                          HELPER_MAX: HELPER_MAX,
+                         helperAllowance: helperAllowance,
+                         randomHelperSet: randomHelperSet,
                          state: function () { return game; } } };
 
   /* ── boot ────────────────────────────────────────────────────────────── */
@@ -919,7 +927,7 @@
     game.run = { money: 0, levelIndex: 0, shots: 0, shotsFired: 0, items: {},
                  aimLen: 110, pocketBonus: 0, soberSips: 0, shotBonus: 0,
                  potBonus: 0, mercyUsed: false,
-                 helpers: randomHelperSet(), helpersLocked: false };
+                 helpers: randomHelperSet(helperAllowance(0)), helpersLocked: false };
     game.baseWarp = LEVELS[0].warp;
     requestAnimationFrame(frame);
   });
