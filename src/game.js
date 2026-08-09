@@ -22,6 +22,11 @@
   // Cat: a nudge, not a shot. Only goes for the pot from inside CAT_COMMIT px.
   var CAT_NUDGE = 26, CAT_NUDGE_VAR = 22, CAT_COMMIT = 52;
 
+  // Bridges sit at an angle to the rail so their mouth faces the middle of
+  // the table, and stop short of the pocket so the last stretch still counts.
+  var BRIDGE_TILT = Math.PI / 6;   // 30°
+  var BRIDGE_GAP = 24;
+
   // At most two helpers on the table at once (for now).
   var HELPER_MAX = 2;
   var HELPERS = [
@@ -279,31 +284,61 @@
   }
 
   /**
-   * A bridge is only worth crossing if it goes somewhere: aim its long axis
-   * at a pocket and stop the far end ~24px short, so a ball that rides the
-   * corridor exits pointed at the hole but still has to survive the last
-   * stretch of drunk space. Roughly a coin flip, which is the idea.
+   * A bridge is only worth crossing if it goes somewhere: its axis passes
+   * exactly through a pocket, and the far end stops BRIDGE_GAP short, so a
+   * ball that rides the corridor exits pointed at the hole with one last
+   * stretch of drunk space to survive.
+   *
+   * The axis is tilted BRIDGE_TILT off the rail-parallel direction, in
+   * whichever of the two directions swings the entrance toward the middle of
+   * the table. A corridor lying flat along a rail can only be entered from
+   * along that rail; angling it opens the mouth to the centre, where the cue
+   * ball actually lives.
    */
   function bridgeToPocket(world) {
     var pk = world.pockets[Math.floor(Math.random() * world.pockets.length)];
-    var cx = RECT.x + RECT.w / 2, cy = RECT.y + RECT.h / 2;
-    var dx = pk.x - cx, dy = pk.y - cy;
-    var deck = 15, len = 76 + Math.random() * 26, gap = 24;
+    var mx = RECT.x + RECT.w / 2, my = RECT.y + RECT.h / 2;
+    var dx = pk.x - mx, dy = pk.y - my;
+    var len = 74 + Math.random() * 26, hw = 8;
 
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // corner pocket: a horizontal run hugging the near rail
-      var y = clamp(pk.y - deck / 2, RECT.y + 1, RECT.y + RECT.h - deck - 1);
-      var x = dx < 0 ? pk.x + gap : pk.x - gap - len;
-      return { type: "bridge", axis: "h", aimAt: pk,
-               x: clamp(x, RECT.x + 2, RECT.x + RECT.w - len - 2),
-               y: y, w: len, h: deck };
+    // the rail-parallel heading that points at this pocket
+    var base = Math.abs(dx) > Math.abs(dy)
+      ? (dx < 0 ? Math.PI : 0)
+      : (dy < 0 ? -Math.PI / 2 : Math.PI / 2);
+
+    var best = null;
+    for (var s = -1; s <= 1; s += 2) {
+      var ang = base + s * BRIDGE_TILT;
+      var ux = Math.cos(ang), uy = Math.sin(ang);
+      // exit end sits BRIDGE_GAP back from the pocket, along the axis
+      var ex = pk.x - ux * BRIDGE_GAP, ey = pk.y - uy * BRIDGE_GAP;
+      var entX = ex - ux * len, entY = ey - uy * len;
+      var reach = Math.hypot(entX - mx, entY - my);   // mouth nearest the middle wins
+      if (!best || reach < best.reach)
+        best = { reach: reach, ang: ang, cos: ux, sin: uy,
+                 cx: ex - ux * (len / 2), cy: ey - uy * (len / 2) };
     }
-    // side pocket: a vertical run straight down the middle column
-    var vx = clamp(pk.x - deck / 2, RECT.x + 1, RECT.x + RECT.w - deck - 1);
-    var vy = dy < 0 ? pk.y + gap : pk.y - gap - len;
-    return { type: "bridge", axis: "v", aimAt: pk,
-             x: vx, y: clamp(vy, RECT.y + 2, RECT.y + RECT.h - len - 2),
-             w: deck, h: len };
+    return { type: "bridge", aimAt: pk, cx: best.cx, cy: best.cy,
+             ang: best.ang, cos: best.cos, sin: best.sin, len: len, hw: hw };
+  }
+
+  /** The four corners of an oriented bridge, in world coordinates. */
+  function bridgeCorners(z) {
+    var px = -z.sin, py = z.cos, hl = z.len / 2, out = [];
+    for (var a = -1; a <= 1; a += 2)
+      for (var b = -1; b <= 1; b += 2)
+        out.push({ x: z.cx + z.cos * hl * a + px * z.hw * b,
+                   y: z.cy + z.sin * hl * a + py * z.hw * b });
+    return out;
+  }
+
+  function zoneBBox(z) {
+    if (z.type !== "bridge") return { x: z.x, y: z.y, w: z.w, h: z.h };
+    var c = bridgeCorners(z);
+    var xs = c.map(function (p) { return p.x; }), ys = c.map(function (p) { return p.y; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
 
   function euclidPatch() {
@@ -317,25 +352,31 @@
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  /** Reject a zone that would trap a ball inside a railing or overlap another. */
+  /** Reject a zone that runs off the felt, traps a ball on a railing, or
+      overlaps one already placed. */
   function zoneBlocked(z, world, placed) {
-    var i;
+    var i, bb = zoneBBox(z);
+
     if (z.type === "bridge") {
+      var c = bridgeCorners(z);
+      for (i = 0; i < c.length; i++)
+        if (c[i].x < RECT.x + 2 || c[i].x > RECT.x + RECT.w - 2 ||
+            c[i].y < RECT.y + 2 || c[i].y > RECT.y + RECT.h - 2) return true;
+
       for (i = 0; i < world.balls.length; i++) {
         var b = world.balls[i];
-        // a ball sitting on the deck is fine; sitting ON a railing is not
-        var nearX = b.x > z.x - BALL_R * 2 && b.x < z.x + z.w + BALL_R * 2;
-        var nearY = b.y > z.y - BALL_R * 2 && b.y < z.y + z.h + BALL_R * 2;
-        if (!nearX || !nearY) continue;
-        if (z.axis === "h" &&
-            (Math.abs(b.y - z.y) < BALL_R + 2 || Math.abs(b.y - (z.y + z.h)) < BALL_R + 2)) return true;
-        if (z.axis === "v" &&
-            (Math.abs(b.x - z.x) < BALL_R + 2 || Math.abs(b.x - (z.x + z.w)) < BALL_R + 2)) return true;
+        // a ball resting on the deck is fine; resting ON a railing is not
+        var u = (b.x - z.cx) * z.cos + (b.y - z.cy) * z.sin;
+        if (Math.abs(u) > z.len / 2 + BALL_R * 2) continue;
+        var v = -(b.x - z.cx) * z.sin + (b.y - z.cy) * z.cos;
+        if (Math.abs(Math.abs(v) - z.hw) < BALL_R + 2) return true;
       }
     }
+
     for (i = 0; i < placed.length; i++) {
-      var o = placed[i];
-      if (z.x < o.x + o.w && z.x + z.w > o.x && z.y < o.y + o.h && z.y + z.h > o.y) return true;
+      var o = zoneBBox(placed[i]);
+      if (bb.x < o.x + o.w && bb.x + bb.w > o.x &&
+          bb.y < o.y + o.h && bb.y + bb.h > o.y) return true;
     }
     return false;
   }
@@ -659,7 +700,7 @@
   }
 
   function openSetup() {
-    if (game.state !== "play") return;
+    if (game.state !== "play" || !game.dev) return;   // dev tool only
     game.prevState = game.state;
     game.state = "setup";
     game.aim.active = false;
@@ -861,7 +902,9 @@
       var k = e.key.toLowerCase();
       if (k === "d") {
         game.dev = !game.dev;
-        say(game.dev ? "dev path: ON" : "dev path: off", Render.PAL.danger, 1600);
+        if (!game.dev && game.state === "setup") closeSetup();
+        say(game.dev ? "dev mode: ON (D path, N skip, M helpers)"
+                     : "dev mode: off", Render.PAL.danger, 1900);
       } else if (k === "n" && game.state === "play") {
         audio();
         shot = null;

@@ -99,7 +99,16 @@ physics itself:
 | Helper | Behavior |
 |---|---|
 | **Euclidean patch** | pale dashed rectangle where geometry is flat: balls travel straight until they exit; the grid inside is visibly still |
-| **Bridge** | wooden causeway, euclidean deck, railings on the long edges that balls bounce off. Its long axis is **aimed at a pocket** and its far end stops ~24px short, so riding the corridor leaves you pointed at the hole with one stretch of drunk space still to survive — measured ~66% pot rate over sloppy entries at high warp |
+| **Bridge** | wooden causeway, euclidean deck, reflecting railings on the long edges. Its axis passes **exactly through a pocket** and stops `BRIDGE_GAP` (24px) short, so riding the corridor leaves you pointed at the hole with one stretch of drunk space still to survive — measured ~62% pot rate over sloppy entries at high warp |
+
+Bridges are **oriented rectangles**, tilted `BRIDGE_TILT` (30°) off the
+rail-parallel heading, in whichever of the two directions swings the mouth
+toward the middle of the table. A corridor lying flat along a rail can only
+be entered from along that rail; angling it opens the mouth to the centre,
+where the cue ball actually lives. The physics works in the corridor's own
+frame (`u` along, `v` across), so railings reflect correctly at any angle,
+and the deck is rasterized per pixel into a cached sprite — canvas rotation
+would antialias the edges and break the pixel look.
 | **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
 | **Bar cat** | at most **once per level**, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, and **taps** a ball toward the nearest pocket, then fades out the same way |
 
@@ -111,12 +120,13 @@ speed to reach, tight aim — and actually try to sink it.
 Zones affect the aim tracer identically to the physics (the preview stays
 honest), and cat/crane pots pay out like any other pot.
 
-### Choosing the helpers — TABLE SETUP menu
+### Choosing the helpers — TABLE SETUP menu (dev only)
 
 At most **two** helpers are on the felt at once (`HELPER_MAX`). Each level
-rolls a random pair, but the player can open **TABLE SETUP** (HELPERS button
-in the HUD, or `M` / `Esc`) and pick exactly which two they want from the
-four. Notes:
+rolls a random pair. In **dev mode only** (`D`), a HELPERS button appears in
+the HUD — `M` / `Esc` also work — opening **TABLE SETUP**, where the player
+picks exactly which two they want from the four. Outside dev mode the button
+is not drawn and the keys do nothing. Notes:
 
 - Changes apply **live** — the table behind the dimmed menu updates on every
   toggle. Selecting past the cap is refused with a buzz rather than silently
@@ -141,7 +151,7 @@ Two toggles, as HUD corner buttons (mobile) and keys (desktop):
   Pockets keep their rims, the warp tint and grid stay faint but readable.
 - **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
   whole world layer. HUD text stays sober.
-- **HELPERS** (`M` / `Esc`): opens the TABLE SETUP menu above.
+- **HELPERS** (`M` / `Esc`): opens the TABLE SETUP menu above. Dev mode only.
 
 ### Ambience
 
@@ -156,8 +166,9 @@ goes soft and sharpens back over ~1.6s (canvas `filter: blur()`, eased out).
 
 | Key | Effect |
 |---|---|
-| **D** | toggle the full-length aim trajectory (1600px trace); "DEV PATH" shows in the HUD |
+| **D** | master dev toggle: full-length aim trajectory (1600px trace), "DEV PATH" in the HUD, and unlocks the two below |
 | **N** | skip the current level — takes the normal clear path, so it pays out and opens the shop |
+| **M** / `Esc` | open the TABLE SETUP helper menu (dev only) |
 
 Remove both before release.
 

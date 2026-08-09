@@ -81,54 +81,66 @@
 
   /* ── zones: patches of the table where geometry behaves ──────────────── */
 
-  /** True when (x,y) is inside any euclidean zone (patch or bridge deck):
-      no geodesic bending there — shots run straight until they leave. */
+  /**
+   * Zones come in two shapes:
+   *   euclid patch — axis-aligned rect {x, y, w, h}
+   *   bridge       — oriented rect {cx, cy, cos, sin, len, hw} at any angle,
+   *                  with reflecting railings along its two long edges.
+   * Bridge-local coordinates: u along the corridor, v across it.
+   */
+  function localU(z, x, y) { return (x - z.cx) * z.cos + (y - z.cy) * z.sin; }
+  function localV(z, x, y) { return -(x - z.cx) * z.sin + (y - z.cy) * z.cos; }
+
+  function inZone(z, x, y) {
+    if (z.type === "bridge") {
+      return Math.abs(localU(z, x, y)) <= z.len / 2 &&
+             Math.abs(localV(z, x, y)) <= z.hw;
+    }
+    return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+  }
+
+  /** True inside any euclidean zone: no geodesic bending, shots run straight. */
   function inEuclid(world, x, y) {
     var zs = world.zones;
     if (!zs) return false;
-    for (var i = 0; i < zs.length; i++) {
-      var z = zs[i];
-      if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) return true;
-    }
+    for (var i = 0; i < zs.length; i++) if (inZone(zs[i], x, y)) return true;
     return false;
   }
 
-  /** One railing: a wall segment balls bounce off from either side. */
-  function railHitH(o, r, e, x0, x1, y, events, b) {
-    if (o.x < x0 - r || o.x > x1 + r) return;
-    var d = o.y - y;
-    if (Math.abs(d) >= r) return;
-    o.y = y + (d >= 0 ? r : -r);
-    if (d >= 0 ? o.vy < 0 : o.vy > 0) {
-      o.vy = -o.vy * e;
-      if (events) events.push({ t: "cushion", b: b });
-    }
-  }
-  function railHitV(o, r, e, y0, y1, x, events, b) {
-    if (o.y < y0 - r || o.y > y1 + r) return;
-    var d = o.x - x;
-    if (Math.abs(d) >= r) return;
-    o.x = x + (d >= 0 ? r : -r);
-    if (d >= 0 ? o.vx < 0 : o.vx > 0) {
-      o.vx = -o.vx * e;
-      if (events) events.push({ t: "cushion", b: b });
-    }
-  }
-
-  /** Bridge railings: the two long edges of a bridge reflect balls. */
+  /**
+   * Bridge railings. Worked in the corridor's own frame, so it handles any
+   * angle. A ball can only ever touch one railing at a time (the corridor is
+   * wider than a ball), hence the else-if.
+   */
   function zoneWalls(world, o, r, e, events, b) {
     var zs = world.zones;
     if (!zs) return;
     for (var i = 0; i < zs.length; i++) {
       var z = zs[i];
       if (z.type !== "bridge") continue;
-      if (z.axis === "h") {
-        railHitH(o, r, e, z.x, z.x + z.w, z.y, events, b);
-        railHitH(o, r, e, z.x, z.x + z.w, z.y + z.h, events, b);
-      } else {
-        railHitV(o, r, e, z.y, z.y + z.h, z.x, events, b);
-        railHitV(o, r, e, z.y, z.y + z.h, z.x + z.w, events, b);
+
+      var u = localU(z, o.x, o.y);
+      if (u < -z.len / 2 - r || u > z.len / 2 + r) continue;   // past the ends
+      var v = localV(z, o.x, o.y);
+
+      var rail = 0;
+      if (Math.abs(v - z.hw) < r) rail = z.hw;
+      else if (Math.abs(v + z.hw) < r) rail = -z.hw;
+      else continue;
+
+      var side = v >= rail ? 1 : -1;
+      var vv = -o.vx * z.sin + o.vy * z.cos;
+      var into = side >= 0 ? vv < 0 : vv > 0;
+      v = rail + side * r;
+      if (into) {
+        var vu = o.vx * z.cos + o.vy * z.sin;
+        vv = -vv * e;
+        o.vx = vu * z.cos - vv * z.sin;
+        o.vy = vu * z.sin + vv * z.cos;
+        if (events) events.push({ t: "cushion", b: b });
       }
+      o.x = z.cx + u * z.cos - v * z.sin;
+      o.y = z.cy + u * z.sin + v * z.cos;
     }
   }
 
@@ -289,6 +301,7 @@
     anyMoving: anyMoving,
     tracePath: tracePath,
     inEuclid: inEuclid,
+    inZone: inZone,
     FRICTION: FRICTION,
   };
 })(typeof window !== "undefined" ? window : globalThis);

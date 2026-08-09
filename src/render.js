@@ -301,12 +301,41 @@
   function inBridge(world, x, y) {
     var zs = world.zones;
     if (!zs) return false;
-    for (var i = 0; i < zs.length; i++) {
-      var z = zs[i];
-      if (z.type === "bridge" && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h)
-        return true;
-    }
+    for (var i = 0; i < zs.length; i++)
+      if (zs[i].type === "bridge" && Phys.inZone(zs[i], x, y)) return true;
     return false;
+  }
+
+  /**
+   * Bridges sit at an angle, so the deck is rasterized per pixel rather than
+   * filled as a rect — canvas rotation would antialias the edges and break
+   * the pixel look. It never moves, so bake it once and blit thereafter.
+   */
+  function bridgeSprite(z) {
+    if (z._spr) return z._spr;
+    var hl = z.len / 2, pad = 2;
+    var ext = Math.abs(z.cos) * hl + Math.abs(z.sin) * z.hw + pad;
+    var ext2 = Math.abs(z.sin) * hl + Math.abs(z.cos) * z.hw + pad;
+    var ox = Math.floor(z.cx - ext), oy = Math.floor(z.cy - ext2);
+    var w = Math.ceil(ext * 2) + 1, h = Math.ceil(ext2 * 2) + 1;
+
+    var cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    var c = cv.getContext("2d");
+    for (var py = 0; py < h; py++) {
+      for (var px = 0; px < w; px++) {
+        var dx = ox + px - z.cx, dy = oy + py - z.cy;
+        var u = dx * z.cos + dy * z.sin;
+        var v = -dx * z.sin + dy * z.cos;
+        if (Math.abs(u) > hl || Math.abs(v) > z.hw) continue;
+        var onRail = Math.abs(v) > z.hw - 1.6;
+        var seam = !onRail && (Math.round(u + hl) % 6) === 0;
+        c.fillStyle = onRail ? PAL.railLight : (seam ? PAL.railDark : PAL.rail);
+        c.fillRect(px, py, 1, 1);
+      }
+    }
+    z._spr = { cv: cv, ox: ox, oy: oy };
+    return z._spr;
   }
 
   function drawZones(game, t) {
@@ -316,19 +345,9 @@
     for (var i = 0; i < zs.length; i++) {
       var z = zs[i];
       if (z.type === "bridge") {
-        // wooden deck with bright railings on the long edges
+        var sp = bridgeSprite(z);
         bctx.globalAlpha = base;
-        fill(z.x, z.y, z.w, z.h, PAL.rail);
-        for (var px = z.x; px < z.x + z.w; px += 6)   // plank seams
-          fill(px, z.y, 1, z.h, PAL.railDark);
-        bctx.globalAlpha = Math.min(1, base + 0.35);  // railings stay readable
-        if (z.axis === "h") {
-          fill(z.x, z.y, z.w, 2, PAL.railLight);
-          fill(z.x, z.y + z.h - 2, z.w, 2, PAL.railLight);
-        } else {
-          fill(z.x, z.y, 2, z.h, PAL.railLight);
-          fill(z.x + z.w - 2, z.y, 2, z.h, PAL.railLight);
-        }
+        bctx.drawImage(sp.cv, sp.ox, sp.oy);
       } else {
         // euclidean patch: a pale calm island — dashed border, still grid
         bctx.globalAlpha = 0.08 * base;
@@ -609,10 +628,11 @@
   function drawHud(game, t) {
     var run = game.run, lv = game.level;
 
-    // toggles + setup, tucked along the bottom edge clear of the power bar
+    // toggles along the bottom edge, clear of the power bar
     button("glass", 4, 212, 46, 11, "GLASS", game.glass || game.hover === "glass", 5);
-    button("setup", BW - 106, 212, 52, 11, "HELPERS", game.hover === "setup", 5);
     button("trip", BW - 50, 212, 46, 11, "TRIP", game.trip || game.hover === "trip", 5);
+    // helper picking is a dev tool, so it only shows up in dev mode
+    if (game.dev) button("setup", BW - 106, 212, 52, 11, "HELPERS", game.hover === "setup", 5);
 
     text("LVL " + (run.levelIndex + 1) + "/3", 18, 8, 7, PAL.dim);
     text(lv.name, 74, 8, 7, PAL.accent);
@@ -701,6 +721,7 @@
     var chosen = game.run.helpers || [];
 
     text("TABLE SETUP", BW / 2, 12, 11, PAL.accent, "center");
+    text("dev tool", BW / 2, 200, 5, PAL.danger, "center");
     text("what's on the felt  ·  " + chosen.length + "/" + max + " picked",
       BW / 2, 30, 6, chosen.length >= max ? PAL.accent : PAL.dim, "center");
 
