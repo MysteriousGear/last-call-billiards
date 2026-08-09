@@ -86,7 +86,14 @@
     pocket:  function () { beep(300, 0.16, 0.18, "square", 260); },
     portal:  function () { beep(500, 0.25, 0.14, "sawtooth", -320); },
     shoot:   function () { beep(140, 0.08, 0.14, "triangle", 120); },
-    chaser:  function () { beep(320, 0.35, 0.16, "sawtooth", -180); setTimeout(function () { beep(180, 0.25, 0.12, "triangle", -60); }, 180); },
+    chaser:  function () {
+      // three gulps, the glass hits the bar, the room starts to lean
+      [520, 430, 340].forEach(function (f, i) {
+        setTimeout(function () { beep(f, 0.08, 0.18, "triangle", -80); }, i * 120);
+      });
+      setTimeout(function () { beep(85, 0.28, 0.22, "sawtooth", -25); }, 400);
+      setTimeout(function () { beep(260, 0.55, 0.13, "sawtooth", -170); }, 470);
+    },
     special: function () { [660, 880, 1100].forEach(function (f, i) { setTimeout(function () { beep(f, 0.09, 0.14, "square"); }, i * 70); }); },
     giggle:  function () { beep(900, 0.06, 0.08, "square", 300); setTimeout(function () { beep(1100, 0.06, 0.08, "square", 300); }, 90); },
     buy:     function () { beep(520, 0.09, 0.14, "square"); setTimeout(function () { beep(780, 0.12, 0.14, "square"); }, 80); },
@@ -104,7 +111,7 @@
     shopStock: [], hover: null,
     msg: "", msgUntil: 0, msgColor: null,
     levelStartT: 0, endReason: "",
-    chasers: 0, vis: null, dev: false, goblin: null,
+    chasers: 0, vis: null, dev: false, goblin: null, flashT: 0,
     cue: function () {
       for (var i = 0; i < game.world.balls.length; i++)
         if (game.world.balls[i].color === "cue") return game.world.balls[i];
@@ -389,6 +396,7 @@
     var c2 = Math.floor(game.run.shotsFired / CHASER_EVERY);
     if (c2 > game.chasers) {
       game.chasers = c2;
+      game.flashT = tNow;   // screen brightens, then settles back
       SFX.chaser();
       say("CHASER DOWNED (hic) — space tilts", Render.PAL.accent, 3200);
     }
@@ -460,8 +468,8 @@
       if (wasMoving && !moving) settleShot();
       wasMoving = moving;
 
-      // the goblin checks on you now and then
-      if (!game.goblin && Math.random() < dt / 13) {
+      // the goblin checks on you once in a while (avg ~35s)
+      if (!game.goblin && Math.random() < dt / 35) {
         game.goblin = {
           x: RECT.x + 24 + Math.random() * (RECT.w - 48),
           y: RECT.y + RECT.h + 9,

@@ -550,6 +550,14 @@
     }
     dctx.drawImage(buf, offX + wx, offY + wy, BW * scale, BH * scale);
 
+    // chaser flash: the world brightens for a beat, then settles back
+    if (game.flashT && t - game.flashT < 1) {
+      dctx.globalAlpha = 0.5 * (1 - (t - game.flashT));
+      dctx.fillStyle = "#fff3cf";
+      dctx.fillRect(0, 0, canvas.width, canvas.height);
+      dctx.globalAlpha = 1;
+    }
+
     flushText(); // sober layer: text never wobbles
   }
 

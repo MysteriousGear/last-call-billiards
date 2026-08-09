@@ -77,8 +77,10 @@ under balls capture them, and the table keeps its new position).
 
 Subtle trippy backdrop behind the table: twinkling stars, purple/blue
 nebula blobs, rotating gears, drifting jellyfish, floating physics
-equations. A goblin peeks over the bottom rail every ~13s at a random spot,
-eyes tracking the cue ball.
+equations. A goblin peeks over the bottom rail every ~35s at a random spot,
+eyes tracking the cue ball. Downing a chaser is a moment: gulp-gulp-gulp
+audio, the glass hits the bar, and the screen brightens then settles back
+over about a second.
 
 ### Dev mode (temporary)
 
