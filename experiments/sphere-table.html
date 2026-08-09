@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Curved Table — Level 1: The Sphere</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b0f;
+    --ink:#e6f0f2;
+    --dim:#7d949b;
+    --teal:#5fd6bb;
+    --amber:#f0b344;
+    --line:rgba(95,214,187,.22);
+    --panel:rgba(10,18,23,.82);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas.aiming{cursor:crosshair}
+
+  .layer{position:fixed;inset:0;pointer-events:none}
+  .layer > *{pointer-events:auto}
+
+  /* ---- HUD ---- */
+  .hud{position:fixed;top:0;left:0;right:0;padding:18px 20px;
+    display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .brand .eyebrow{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--teal);opacity:.8}
+  .brand h1{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-top:3px}
+  .brand .sub{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--dim);margin-top:3px}
+
+  .stats{display:flex;gap:8px}
+  .stat{background:var(--panel);border:1px solid rgba(95,214,187,.14);border-radius:9px;
+    padding:7px 11px;min-width:60px;text-align:center;backdrop-filter:blur(8px)}
+  .stat .k{font-family:"JetBrains Mono",monospace;font-size:9px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--dim)}
+  .stat .v{font-family:"JetBrains Mono",monospace;font-size:17px;font-weight:700;
+    color:var(--ink);line-height:1.25}
+
+  /* ---- bottom bar ---- */
+  .dock{position:fixed;left:0;right:0;bottom:0;padding:16px 20px;
+    display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+  .tip{font-size:12.5px;color:var(--dim);line-height:1.55;max-width:min(46ch,60vw)}
+  .tip b{color:var(--ink);font-weight:500}
+  .tip .warn{color:var(--amber)}
+  .btns{display:flex;gap:8px}
+  button{font-family:inherit;font-size:12px;font-weight:500;color:var(--ink);
+    background:var(--panel);border:1px solid rgba(95,214,187,.2);border-radius:9px;
+    padding:9px 14px;cursor:pointer;backdrop-filter:blur(8px);transition:.14s}
+  button:hover{border-color:var(--teal);color:var(--teal)}
+  button.off{opacity:.45}
+  button kbd{font-family:"JetBrains Mono",monospace;font-size:9px;opacity:.5;margin-left:6px}
+
+  /* ---- overlays ---- */
+  .veil{position:fixed;inset:0;display:grid;place-items:center;padding:24px;
+    background:radial-gradient(circle at 50% 45%,rgba(7,11,15,.72),rgba(7,11,15,.94));
+    backdrop-filter:blur(3px);z-index:10}
+  .veil[hidden]{display:none}
+  .card{width:min(440px,100%);background:var(--panel);border:1px solid rgba(95,214,187,.2);
+    border-radius:16px;padding:26px 26px 22px;backdrop-filter:blur(14px);
+    box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .card .eyebrow{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--teal)}
+  .card h2{font-size:23px;font-weight:700;letter-spacing:-.02em;margin:8px 0 12px}
+  .card p{font-size:13.5px;line-height:1.65;color:#b9ccd1;margin-bottom:10px}
+  .card p b{color:var(--ink);font-weight:500}
+  .card .rule{list-style:none;margin:14px 0 18px;border-top:1px solid rgba(95,214,187,.12)}
+  .card .rule li{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid rgba(95,214,187,.08);
+    font-size:12.5px;color:#b9ccd1;line-height:1.5}
+  .card .rule span{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--teal);
+    letter-spacing:.1em;text-transform:uppercase;flex:0 0 74px;padding-top:2px}
+  .card button{width:100%;padding:12px;font-size:13px;font-weight:700;
+    background:var(--teal);color:#06231d;border-color:var(--teal)}
+  .card button:hover{filter:brightness(1.1);color:#06231d}
+  .card .after{text-align:center;font-family:"JetBrains Mono",monospace;font-size:10px;
+    color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-top:14px}
+
+  @media (max-width:640px){
+    .brand h1{font-size:15px}
+    .tip{max-width:100%;font-size:12px}
+    .dock{flex-direction:column;align-items:stretch}
+    .btns{justify-content:flex-end}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div class="layer">
+  <div class="hud">
+    <div class="brand">
+      <div class="eyebrow">Curved Table · Level 1</div>
+      <h1>The Sphere</h1>
+      <div class="sub" id="surface">surface: S² · curvature κ = +1 · geodesic = great circle</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">Shots</div><div class="v" id="shots">0</div></div>
+      <div class="stat"><div class="k">Fouls</div><div class="v" id="fouls">0</div></div>
+    </div>
+  </div>
+
+  <div class="dock">
+    <div class="tip" id="tip"></div>
+    <div class="btns">
+      <button id="btnHint">Geodesic hint<kbd>H</kbd></button>
+      <button id="btnView">Reset view<kbd>V</kbd></button>
+      <button id="btnReset">Restart<kbd>R</kbd></button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="intro">
+  <div class="card">
+    <div class="eyebrow">Briefing</div>
+    <h2>Straight lines are loops here</h2>
+    <p>This table is a <b>sphere</b>. A spin-free shot travels along a <b>great circle</b> — the
+       sphere's version of a straight line. It never stops turning, and if it has enough power it
+       comes all the way around and hits you from behind.</p>
+    <p>The pocket is <b>not</b> on the near face. Getting the black ball there means sending it
+       the long way around.</p>
+    <ul class="rule">
+      <li><span>Aim</span>Drag from the cue ball toward where you want it to go. Drag length = power.</li>
+      <li><span>Look</span>Drag anywhere else to orbit the sphere and see the far side.</li>
+      <li><span>Hint</span>The dashed ghost line is the full infinite geodesic. The solid line is how far your shot actually reaches.</li>
+    </ul>
+    <button id="btnStart">Take the shot</button>
+    <div class="after">One cue · one black · one pocket</div>
+  </div>
+</div>
+
+<div class="veil" id="win" hidden>
+  <div class="card">
+    <div class="eyebrow">Level complete</div>
+    <h2 id="winTitle">Potted.</h2>
+    <p id="winBody"></p>
+    <ul class="rule">
+      <li><span>Next</span>Level 2 — the torus. Straight shots wrap off one edge and return from the other.</li>
+      <li><span>Then</span>Level 3 — hyperbolic. Parallel shots run away from each other, forever.</li>
+    </ul>
+    <button id="btnAgain">Play again</button>
+    <div class="after">More surfaces coming</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════════════
+   CURVED TABLE — Level 1: spherical surface
+   Single-file POC. Sections below map 1:1 onto the planned module split
+   (physics / camera / render / input / levels / ui / main).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── physics.js ── vector math on the unit sphere ────────────────────────── */
+
+const v3    = (x, y, z) => ({ x, y, z });
+const add   = (a, b) => v3(a.x + b.x, a.y + b.y, a.z + b.z);
+const sub   = (a, b) => v3(a.x - b.x, a.y - b.y, a.z - b.z);
+const mul   = (a, s) => v3(a.x * s, a.y * s, a.z * s);
+const dot   = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const len   = a => Math.hypot(a.x, a.y, a.z);
+const norm  = a => { const l = len(a) || 1; return mul(a, 1 / l); };
+const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+
+/** Angular (geodesic) distance between two points on the unit sphere. */
+const angDist = (a, b) => Math.acos(clamp(dot(a, b), -1, 1));
+
+/** Component of w lying in the tangent plane at p (p must be unit). */
+const tangent = (p, w) => sub(w, mul(p, dot(w, p)));
+
+/** Unit tangent at `from` pointing along the geodesic toward `to`. */
+const dirToward = (from, to) => norm(tangent(from, sub(to, from)));
+
+/** Point on the unit sphere from latitude/longitude in degrees. */
+function sph(latDeg, lonDeg) {
+  const la = latDeg * Math.PI / 180, lo = lonDeg * Math.PI / 180;
+  return v3(Math.cos(la) * Math.sin(lo), Math.sin(la), Math.cos(la) * Math.cos(lo));
+}
+
+/**
+ * Exact geodesic step: rotate `p` around the axis p×d by angle `t`.
+ * Returns the new position and the parallel-transported direction.
+ * No integration error accumulates in position — this is closed form.
+ */
+function geo(p, d, t) {
+  const c = Math.cos(t), s = Math.sin(t);
+  return {
+    p: norm(add(mul(p, c), mul(d, s))),
+    d: norm(sub(mul(d, c), mul(p, s))),
+  };
+}
+
+
+/* ── levels.js ── level definition ───────────────────────────────────────── */
+
+const BALL_R     = 0.058;   // angular radius of a ball (radians)
+const POCKET_R   = 0.105;   // angular radius of the pocket mouth
+const POT_R      = 0.072;   // ball centre must get this close to be potted
+const FRICTION   = 0.55;    // constant angular deceleration (rad/s²)
+const MAX_SPEED  = 3.0;     // rad/s at full power
+const STOP_SPEED = 0.02;    // below this a ball is considered stopped
+const DRAG_FULL  = 170;     // px of drag that maps to full power
+const SUBSTEPS   = 6;
+
+const LEVEL = (() => {
+  const cue   = sph(-8, -25);
+  const black = sph(6, 20);
+  // Put the pocket on the *same great circle* as the cue→black shot, but far
+  // enough around the sphere that a "straight" shot has to wrap the long way.
+  const t   = dirToward(cue, black);
+  const arc = angDist(cue, black);
+  const pocket = geo(cue, t, arc + 4.35).p;
+  return { cue, black, pocket, par: 1 };
+})();
+
+
+/* ── camera.js ── orbit camera + orthographic projection ─────────────────── */
+
+const cam = { yaw: 0.30, pitch: 0.34 };
+const VIEW_HOME = { yaw: 0.30, pitch: 0.34 };
+
+let basis = { right: v3(1,0,0), up: v3(0,1,0), fwd: v3(0,0,1) };
+
+function updateBasis() {
+  const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
+  const sp = Math.sin(cam.pitch), cp = Math.cos(cam.pitch);
+  basis.fwd   = v3(sy * cp, sp, cy * cp);   // out of the screen, toward viewer
+  basis.right = v3(cy, 0, -sy);             // screen +x
+  basis.up    = v3(-sp * sy, cp, -sp * cy); // screen +y (before flip)
+}
+
+let W = 0, H = 0, CX = 0, CY = 0, RPX = 300, DPR = 1;
+
+/** World point → { x, y } canvas pixels and z depth (>0 = near hemisphere). */
+function project(p) {
+  return {
+    x: CX + dot(basis.right, p) * RPX,
+    y: CY - dot(basis.up, p) * RPX,
+    z: dot(basis.fwd, p),
+  };
+}
+
+/** Screen-space drag delta → unit tangent direction at point p. */
+function screenToTangent(p, dx, dy) {
+  const world = add(mul(basis.right, dx), mul(basis.up, -dy));
+  const t = tangent(p, world);
+  return len(t) < 1e-6 ? null : norm(t);
+}
+
+
+/* ── main.js ── game state ───────────────────────────────────────────────── */
+
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+
+const state = {
+  phase: "intro",     // intro | play | won
+  shots: 0,
+  fouls: 0,
+  scratched: false,
+  hint: true,
+};
+
+let balls = [];
+
+function makeBall(id, p, color) {
+  return { id, p, d: v3(1, 0, 0), speed: 0, color, potted: false, trail: [] };
+}
+
+function resetLevel() {
+  balls = [
+    makeBall("cue",   LEVEL.cue,   "cue"),
+    makeBall("black", LEVEL.black, "black"),
+  ];
+  state.shots = 0;
+  state.fouls = 0;
+  state.scratched = false;
+  state.phase = "play";
+  aim.active = false;
+  syncHud();
+}
+
+const cueBall   = () => balls.find(b => b.id === "cue");
+const blackBall = () => balls.find(b => b.id === "black");
+const allStill  = () => balls.every(b => b.potted || b.speed === 0);
+
+
+/* ── physics.js ── simulation step ───────────────────────────────────────── */
+
+function stepBall(b, dt) {
+  if (b.speed <= 0) return;
+  const step = geo(b.p, b.d, b.speed * dt);
+  b.p = step.p;
+  b.d = step.d;
+  b.speed -= FRICTION * dt;
+  if (b.speed < STOP_SPEED) b.speed = 0;
+}
+
+/**
+ * Equal-mass elastic collision, resolved in the local tangent planes.
+ * The two tangent planes are treated as coincident, which is accurate while
+ * the ball radius stays small relative to the radius of curvature.
+ */
+function resolvePair(a, b) {
+  const d = angDist(a.p, b.p);
+  if (d >= 2 * BALL_R || d < 1e-9) return;
+
+  const na = dirToward(a.p, b.p);   // unit tangent at a, pointing at b
+  const nb = dirToward(b.p, a.p);   // unit tangent at b, pointing at a
+
+  // Separate the overlap symmetrically along the connecting geodesic.
+  const push = (2 * BALL_R - d) / 2 + 1e-5;
+  const ma = geo(a.p, na, -push); a.p = ma.p;
+  const mb = geo(b.p, nb, -push); b.p = mb.p;
+  a.d = norm(tangent(a.p, a.d));
+  b.d = norm(tangent(b.p, b.d));
+
+  const va = mul(a.d, a.speed);
+  const vb = mul(b.d, b.speed);
+  const closing = dot(va, na) + dot(vb, nb);
+  if (closing <= 0) return;         // already separating
+
+  const na2 = mul(na, -closing);
+  const nb2 = mul(nb, -closing);
+  applyVelocity(a, add(va, na2));
+  applyVelocity(b, add(vb, nb2));
+}
+
+function applyVelocity(b, v) {
+  const t = tangent(b.p, v);
+  const s = len(t);
+  if (s < STOP_SPEED) { b.speed = 0; return; }
+  b.speed = s;
+  b.d = mul(t, 1 / s);
+}
+
+function checkPockets() {
+  for (const b of balls) {
+    if (b.potted || angDist(b.p, LEVEL.pocket) > POT_R) continue;
+    b.potted = true;
+    b.speed = 0;
+    if (b.id === "cue") { state.scratched = true; state.fouls++; }
+  }
+}
+
+function simulate(dt) {
+  const h = dt / SUBSTEPS;
+  for (let k = 0; k < SUBSTEPS; k++) {
+    for (const b of balls) if (!b.potted) stepBall(b, h);
+    for (let i = 0; i < balls.length; i++)
+      for (let j = i + 1; j < balls.length; j++)
+        if (!balls[i].potted && !balls[j].potted) resolvePair(balls[i], balls[j]);
+    checkPockets();
+  }
+}
+
+/** Once everything settles, apply the consequences of the shot. */
+function settleShot() {
+  const black = blackBall();
+  if (black.potted && state.phase === "play") {
+    state.phase = "won";
+    showWin();
+    return;
+  }
+  if (state.scratched) {
+    const cue = cueBall();
+    cue.potted = false;
+    cue.speed = 0;
+    cue.trail.length = 0;
+    cue.p = respawnSpot();
+    state.scratched = false;
+    syncHud();
+  }
+}
+
+/** Cue respawn: home position, nudged along a geodesic if something's there. */
+function respawnSpot() {
+  let p = LEVEL.cue;
+  const others = balls.filter(b => b.id !== "cue" && !b.potted);
+  for (let i = 0; i < 24; i++) {
+    const blocked = others.some(o => angDist(p, o.p) < 2.2 * BALL_R)
+                 || angDist(p, LEVEL.pocket) < POCKET_R + 2 * BALL_R;
+    if (!blocked) return p;
+    p = geo(LEVEL.cue, dirToward(LEVEL.cue, LEVEL.black), -(i + 1) * 0.12).p;
+  }
+  return p;
+}
+
+
+/* ── input.js ── pointer handling ────────────────────────────────────────── */
+
+const aim  = { active: false, sx: 0, sy: 0, dx: 0, dy: 0, dir: null, power: 0 };
+const orbit = { active: false, x: 0, y: 0 };
+
+/** Distance from the cue ball to a shot travelling at `speed`, in radians. */
+const rangeOf = speed => (speed * speed) / (2 * FRICTION);
+
+function pointerPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function canShoot() {
+  return state.phase === "play" && allStill() && !cueBall().potted;
+}
+
+/** True if the pointer landed close enough to a visible cue ball to aim. */
+function grabbingCue(pt) {
+  const cue = cueBall();
+  if (!cue || cue.potted) return false;
+  const s = project(cue.p);
+  if (s.z <= 0) return false;                       // far side — orbit instead
+  const grab = Math.max(34, RPX * Math.sin(BALL_R) * 2.1);
+  return Math.hypot(pt.x - s.x, pt.y - s.y) <= grab;
+}
+
+canvas.addEventListener("pointerdown", e => {
+  if (state.phase !== "play") return;
+  canvas.setPointerCapture(e.pointerId);
+  const pt = pointerPos(e);
+
+  if (canShoot() && grabbingCue(pt)) {
+    aim.active = true;
+    aim.sx = pt.x; aim.sy = pt.y;
+    aim.dx = 0; aim.dy = 0; aim.dir = null; aim.power = 0;
+    canvas.classList.add("aiming");
+  } else {
+    orbit.active = true;
+    orbit.x = pt.x; orbit.y = pt.y;
+  }
+});
+
+canvas.addEventListener("pointermove", e => {
+  const pt = pointerPos(e);
+
+  if (aim.active) {
+    aim.dx = pt.x - aim.sx;
+    aim.dy = pt.y - aim.sy;
+    const mag = Math.hypot(aim.dx, aim.dy);
+    aim.power = clamp(mag / DRAG_FULL, 0, 1);
+    aim.dir = mag > 4 ? screenToTangent(cueBall().p, aim.dx, aim.dy) : null;
+  } else if (orbit.active) {
+    cam.yaw   -= (pt.x - orbit.x) * 0.0062;
+    cam.pitch  = clamp(cam.pitch + (pt.y - orbit.y) * 0.0062, -1.35, 1.35);
+    orbit.x = pt.x; orbit.y = pt.y;
+    updateBasis();
+  }
+});
+
+function endPointer() {
+  if (aim.active) {
+    canvas.classList.remove("aiming");
+    if (aim.dir && aim.power > 0.045) {
+      const cue = cueBall();
+      cue.d = aim.dir;
+      cue.speed = aim.power * MAX_SPEED;
+      cue.trail.length = 0;
+      state.shots++;
+      syncHud();
+    }
+    aim.active = false;
+  }
+  orbit.active = false;
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === "r") restart();
+  else if (k === "h") toggleHint();
+  else if (k === "v") resetView();
+});
+
+
+/* ── render.js ── drawing ────────────────────────────────────────────────── */
+
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  canvas.width  = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W / 2;
+  CY = H / 2 + (W < 640 ? 6 : 0);
+  RPX = Math.min(W, H) * (W < 640 ? 0.36 : 0.375);
+}
+addEventListener("resize", resize);
+
+/** Sample a full geodesic (or an arc of one) as an array of world points. */
+function geodesicPoints(p, d, arc, n) {
+  const out = new Array(n + 1);
+  for (let i = 0; i <= n; i++) out[i] = geo(p, d, (arc * i) / n).p;
+  return out;
+}
+
+/** Stroke only the segments on the requested hemisphere, as continuous runs. */
+function strokeSide(pts, near) {
+  ctx.beginPath();
+  let open = false;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if ((a.z + b.z > 0) === near) {
+      if (!open) { ctx.moveTo(a.x, a.y); open = true; }
+      ctx.lineTo(b.x, b.y);
+    } else open = false;
+  }
+  ctx.stroke();
+}
+
+const projectAll = pts => pts.map(project);
+
+function drawBody() {
+  const g = ctx.createRadialGradient(
+    CX - RPX * 0.34, CY - RPX * 0.42, RPX * 0.1,
+    CX, CY, RPX * 1.06);
+  g.addColorStop(0,   "#17414a");
+  g.addColorStop(0.55,"#0e2b33");
+  g.addColorStop(1,   "#071619");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(CX, CY, RPX, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawLimb() {
+  ctx.save();
+  ctx.strokeStyle = "rgba(95,214,187,.5)";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(CX, CY, RPX, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = "rgba(95,214,187,.10)";
+  ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.arc(CX, CY, RPX + 4.5, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+/* Latitude/longitude reference grid — makes the curvature legible at rest. */
+const GRID = (() => {
+  const curves = [];
+  const N = 128;
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const pts = [];
+    for (let i = 0; i <= N; i++) pts.push(sph(lat, (360 * i) / N));
+    curves.push({ pts, major: lat === 0 });
+  }
+  for (let lon = 0; lon < 180; lon += 15) {
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const t = (2 * Math.PI * i) / N;
+      pts.push(v3(Math.cos(t) * Math.sin(lon * Math.PI / 180),
+                  Math.sin(t),
+                  Math.cos(t) * Math.cos(lon * Math.PI / 180)));
+    }
+    curves.push({ pts, major: lon === 0 });
+  }
+  return curves;
+})();
+
+function drawGrid(near) {
+  ctx.save();
+  for (const c of GRID) {
+    const proj = projectAll(c.pts);
+    ctx.lineWidth = c.major ? 1.5 : 1;
+    ctx.strokeStyle = near
+      ? (c.major ? "rgba(95,214,187,.42)" : "rgba(95,214,187,.17)")
+      : (c.major ? "rgba(95,214,187,.13)" : "rgba(95,214,187,.055)");
+    strokeSide(proj, near);
+  }
+  ctx.restore();
+}
+
+function drawPocket(near) {
+  const s = project(LEVEL.pocket);
+  if ((s.z > 0) !== near) return;
+  const r = RPX * Math.sin(POCKET_R);
+  ctx.save();
+  ctx.globalAlpha = near ? 1 : 0.34;
+
+  const g = ctx.createRadialGradient(s.x, s.y, r * 0.15, s.x, s.y, r);
+  g.addColorStop(0, "#01060a");
+  g.addColorStop(1, "rgba(2,10,14,.35)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = "rgba(240,179,68,.85)";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.stroke();
+
+  // pulsing target ring
+  const t = (performance.now() % 2200) / 2200;
+  ctx.globalAlpha *= 0.55 * (1 - t);
+  ctx.strokeStyle = "rgba(240,179,68,1)";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r * (1 + t * 0.9), 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawTrail(b, near) {
+  if (b.trail.length < 2) return;
+  const now = performance.now();
+  const proj = projectAll(b.trail.map(t => t.p));
+  ctx.save();
+  ctx.lineCap = "round";
+  for (let i = 0; i < proj.length - 1; i++) {
+    const a = proj[i], c = proj[i + 1];
+    if ((a.z + c.z > 0) !== near) continue;
+    const age = (now - b.trail[i].t) / 1100;
+    if (age > 1) continue;
+    const f = (1 - age) * (near ? 0.5 : 0.16);
+    ctx.strokeStyle = b.color === "cue"
+      ? `rgba(230,240,242,${f})` : `rgba(240,179,68,${f})`;
+    ctx.lineWidth = 1 + 2.6 * (1 - age);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawBall(b, near) {
+  if (b.potted) return;
+  const s = project(b.p);
+  if ((s.z > 0) !== near) return;
+  const r = RPX * Math.sin(BALL_R);
+
+  ctx.save();
+  ctx.globalAlpha = near ? 1 : 0.3;
+
+  if (near) {                                  // contact shadow
+    ctx.fillStyle = "rgba(0,0,0,.4)";
+    ctx.beginPath(); ctx.ellipse(s.x + r * .2, s.y + r * .3, r * 1.05, r * .95, 0, 0, 6.29); ctx.fill();
+  }
+
+  const light = b.color === "cue"
+    ? ["#ffffff", "#dfe8ea", "#8fa2a7"]
+    : ["#5c626e", "#23262e", "#0b0d11"];
+  const g = ctx.createRadialGradient(s.x - r * .35, s.y - r * .4, r * .1, s.x, s.y, r);
+  g.addColorStop(0, light[0]); g.addColorStop(.45, light[1]); g.addColorStop(1, light[2]);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = b.color === "cue" ? "rgba(255,255,255,.55)" : "rgba(240,179,68,.55)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.stroke();
+
+  if (!near) {                                 // far-side marker ring
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = "rgba(230,240,242,.6)";
+    ctx.beginPath(); ctx.arc(s.x, s.y, r * 1.6, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+
+/**
+ * The teaching mechanic: the dashed line is the *entire* great circle the
+ * shot lies on; the solid line is how far this much power actually carries.
+ */
+function drawAim() {
+  const cue = cueBall();
+  if (!cue || cue.potted) return;
+
+  const showGhost = state.hint && canShoot();
+  const dir = aim.active && aim.dir ? aim.dir : null;
+  if (!dir && !showGhost) return;
+
+  const c = project(cue.p);
+
+  if (dir && state.hint) {
+    const loop = projectAll(geodesicPoints(cue.p, dir, Math.PI * 2, 168));
+    ctx.save();
+    ctx.setLineDash([7, 8]);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = "rgba(95,214,187,.5)";  strokeSide(loop, true);
+    ctx.strokeStyle = "rgba(95,214,187,.16)"; strokeSide(loop, false);
+    ctx.restore();
+  }
+
+  if (dir) {
+    const reach = Math.min(rangeOf(aim.power * MAX_SPEED), Math.PI * 2 - 0.001);
+    const path = projectAll(geodesicPoints(cue.p, dir, reach, Math.max(24, (reach / (2 * Math.PI)) * 168 | 0)));
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = "rgba(240,179,68,.95)"; strokeSide(path, true);
+    ctx.strokeStyle = "rgba(240,179,68,.3)";  strokeSide(path, false);
+
+    const end = project(geo(cue.p, dir, reach).p);
+    ctx.globalAlpha = end.z > 0 ? 1 : 0.35;
+    ctx.fillStyle = "rgba(240,179,68,1)";
+    ctx.beginPath(); ctx.arc(end.x, end.y, 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // power ring around the cue ball
+    const rr = RPX * Math.sin(BALL_R) + 9;
+    ctx.save();
+    ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(255,255,255,.13)";
+    ctx.beginPath(); ctx.arc(c.x, c.y, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = aim.power > 0.92 ? "#ff8a5b" : "#f0b344";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, rr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * aim.power);
+    ctx.stroke();
+    ctx.restore();
+
+    // readout: how many full loops this shot is worth
+    const loops = reach / (2 * Math.PI);
+    ctx.save();
+    ctx.font = "600 11px 'JetBrains Mono', monospace";
+    ctx.fillStyle = "rgba(240,179,68,.95)";
+    ctx.textAlign = "center";
+    ctx.fillText(`${Math.round(aim.power * 100)}%  ·  ${loops.toFixed(2)} loops`, c.x, c.y - rr - 12);
+    ctx.restore();
+  } else if (showGhost) {
+    // idle hint: pulse a faint ring so the player knows the cue ball is grabbable
+    if (c.z > 0) {
+      const t = (performance.now() % 1800) / 1800;
+      ctx.save();
+      ctx.globalAlpha = 0.35 * (1 - t);
+      ctx.strokeStyle = "#e6f0f2";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, RPX * Math.sin(BALL_R) * (1.3 + t * 1.1), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  const bg = ctx.createRadialGradient(CX, CY, RPX * .3, CX, CY, Math.max(W, H) * .8);
+  bg.addColorStop(0, "#0b1218");
+  bg.addColorStop(1, "#05080b");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  drawBody();
+
+  // far hemisphere, drawn faintly "through" the sphere
+  drawGrid(false);
+  drawPocket(false);
+  for (const b of balls) drawTrail(b, false);
+  for (const b of balls) drawBall(b, false);
+
+  drawLimb();
+
+  // near hemisphere
+  drawGrid(true);
+  drawPocket(true);
+  for (const b of balls) drawTrail(b, true);
+  for (const b of balls) drawBall(b, true);
+
+  drawAim();
+}
+
+
+/* ── ui.js ── HUD, overlays, buttons ─────────────────────────────────────── */
+
+const el = {
+  shots: document.getElementById("shots"),
+  fouls: document.getElementById("fouls"),
+  tip:   document.getElementById("tip"),
+  intro: document.getElementById("intro"),
+  win:   document.getElementById("win"),
+  winTitle: document.getElementById("winTitle"),
+  winBody:  document.getElementById("winBody"),
+  btnHint:  document.getElementById("btnHint"),
+};
+
+function syncHud() {
+  el.shots.textContent = state.shots;
+  el.fouls.textContent = state.fouls;
+
+  let tip;
+  if (state.phase === "won") {
+    tip = "Level complete.";
+  } else if (!allStill()) {
+    tip = "Rolling — a great circle never straightens out.";
+  } else if (cueBall() && project(cueBall().p).z <= 0) {
+    tip = '<span class="warn">The cue ball is on the far side.</span> Drag the background to orbit around to it.';
+  } else if (state.shots === 0) {
+    tip = "<b>Drag from the white ball</b> toward the black one. The dashed line shows where that direction eventually leads.";
+  } else {
+    tip = "The pocket sits <b>far around the back</b>. Line up the black ball and give it enough power to get there.";
+  }
+  el.tip.innerHTML = tip;
+}
+
+function showWin() {
+  const s = state.shots;
+  el.winTitle.textContent = s === 1 ? "First try." : "Potted.";
+  el.winBody.innerHTML =
+    `Sunk in <b>${s} shot${s === 1 ? "" : "s"}</b>` +
+    (state.fouls ? ` with <b>${state.fouls} foul${state.fouls === 1 ? "" : "s"}</b>` : "") +
+    `. On a sphere every straight line closes on itself — nothing ever really goes out of play.`;
+  el.win.hidden = false;
+  syncHud();
+}
+
+function restart() {
+  el.win.hidden = true;
+  resetLevel();
+}
+function resetView() {
+  cam.yaw = VIEW_HOME.yaw;
+  cam.pitch = VIEW_HOME.pitch;
+  updateBasis();
+}
+function toggleHint() {
+  state.hint = !state.hint;
+  el.btnHint.classList.toggle("off", !state.hint);
+  el.btnHint.firstChild.nodeValue = state.hint ? "Geodesic hint" : "Hint off";
+}
+
+document.getElementById("btnStart").onclick = () => { el.intro.hidden = true; resetLevel(); };
+document.getElementById("btnAgain").onclick = restart;
+document.getElementById("btnReset").onclick = restart;
+document.getElementById("btnView").onclick  = resetView;
+el.btnHint.onclick = toggleHint;
+
+
+/* ── main.js ── loop ─────────────────────────────────────────────────────── */
+
+let last = performance.now();
+let wasMoving = false;
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1 / 30);
+  last = now;
+
+  if (state.phase === "play") {
+    const moving = !allStill();
+    if (moving) {
+      simulate(dt);
+      for (const b of balls) {
+        if (b.potted || b.speed === 0) continue;
+        b.trail.push({ p: b.p, t: now });
+        if (b.trail.length > 90) b.trail.shift();
+      }
+    }
+    if (wasMoving && allStill()) { settleShot(); syncHud(); }
+    if (moving !== wasMoving) syncHud();
+    wasMoving = !allStill();
+  }
+
+  // let trails decay once everything has stopped
+  for (const b of balls) {
+    while (b.trail.length && now - b.trail[0].t > 1100) b.trail.shift();
+  }
+
+  render();
+  requestAnimationFrame(frame);
+}
+
+resize();
+updateBasis();
+resetLevel();
+state.phase = "intro";
+syncHud();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
