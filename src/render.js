@@ -47,6 +47,7 @@
   };
 
   var canvas, dctx, buf, bctx, scale = 2, offX = 0, offY = 0;
+  var dpr = 1, cssW = BW, cssH = BH;
   var buttons = [];
 
   /* backdrop actors — generated once */
@@ -86,14 +87,33 @@
     root.addEventListener("resize", resize);
   }
 
+  /**
+   * Fit the 400x225 buffer to the screen.
+   * Scaling is chosen in *device* pixels so phone displays stay crisp: take
+   * the integer factor when it wastes little (<20%), otherwise fall back to
+   * fractional so a landscape phone fills its screen instead of showing a
+   * postage stamp. The context carries the DPR transform, so every drawing
+   * call elsewhere keeps working in CSS pixels.
+   */
   function resize() {
-    var w = root.innerWidth, h = root.innerHeight;
-    var s = Math.min(w / BW, h / BH);
-    scale = s >= 1 ? Math.floor(s) : s;
-    canvas.width = w; canvas.height = h;
-    offX = Math.floor((w - BW * scale) / 2);
-    offY = Math.floor((h - BH * scale) / 2);
+    cssW = root.innerWidth; cssH = root.innerHeight;
+    dpr = Math.min(root.devicePixelRatio || 1, 3);
+
+    var sd = Math.min(cssW * dpr / BW, cssH * dpr / BH); // device-px factor
+    var id = Math.floor(sd);
+    var dev = (id >= 1 && id / sd > 0.8) ? id : sd;
+    scale = dev / dpr;                                    // css-px factor
+
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     dctx.imageSmoothingEnabled = false;
+
+    // snap the letterbox offsets to whole device pixels
+    offX = Math.round((cssW - BW * scale) / 2 * dpr) / dpr;
+    offY = Math.round((cssH - BH * scale) / 2 * dpr) / dpr;
   }
 
   /** client-space pointer → buffer coordinates. */
@@ -134,8 +154,11 @@
     textQueue.push({ s: str, x: x, y: y, sz: size, c: color || PAL.text,
                      a: align || "left", al: alpha === undefined ? 1 : alpha });
   }
-  function flushText() {
+  function flushText(game, t) {
     dctx.textBaseline = "top";
+    // text goes soft with the rest of the room during a chaser
+    var blur = game ? defocusPx(game, t) * 0.55 : 0;
+    dctx.filter = blur > 0.05 ? "blur(" + blur.toFixed(2) + "px)" : "none";
     for (var i = 0; i < textQueue.length; i++) {
       var q = textQueue[i];
       dctx.globalAlpha = q.al;
@@ -145,6 +168,7 @@
       dctx.fillText(q.s, offX + q.x * scale, offY + q.y * scale);
     }
     dctx.globalAlpha = 1;
+    dctx.filter = "none";
     textQueue = [];
   }
 
@@ -540,7 +564,7 @@
     var wy = wob ? Math.cos(t * 0.83) * wob * 0.6 * scale : 0;
 
     dctx.fillStyle = PAL.bg;
-    dctx.fillRect(0, 0, canvas.width, canvas.height);
+    dctx.fillRect(0, 0, cssW, cssH);
     if (vis.ghost && game.state === "play") {
       dctx.globalAlpha = 0.28 * Math.min(1, vis.ghost);
       dctx.drawImage(buf, offX + wx + Math.sin(t * 0.6) * 5 * scale,
@@ -548,17 +572,24 @@
                           BW * scale, BH * scale);
       dctx.globalAlpha = 1;
     }
+    // chaser defocus: your eyes lose the table for a second, then refocus
+    var blur = defocusPx(game, t);
+    if (blur > 0) dctx.filter = "blur(" + blur.toFixed(2) + "px)";
     dctx.drawImage(buf, offX + wx, offY + wy, BW * scale, BH * scale);
+    dctx.filter = "none";
 
-    // chaser flash: the world brightens for a beat, then settles back
-    if (game.flashT && t - game.flashT < 1) {
-      dctx.globalAlpha = 0.5 * (1 - (t - game.flashT));
-      dctx.fillStyle = "#fff3cf";
-      dctx.fillRect(0, 0, canvas.width, canvas.height);
-      dctx.globalAlpha = 1;
-    }
+    flushText(game, t); // sober layer: text never wobbles
+  }
 
-    flushText(); // sober layer: text never wobbles
+  var DEFOCUS_TIME = 1.6;
+  /** Blur radius in device px for the chaser defocus, 0 when it's over. */
+  function defocusPx(game, t) {
+    if (!game.defocusT) return 0;
+    var p = (t - game.defocusT) / DEFOCUS_TIME;
+    if (p < 0 || p >= 1) return 0;
+    // ease out: softest right after the gulp, sharpening back to normal.
+    // canvas filters work in backing-store pixels, hence the dpr.
+    return (1 - p) * (1 - p) * 3.2 * scale * dpr;
   }
 
   root.Render = {

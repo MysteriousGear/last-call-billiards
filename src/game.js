@@ -111,7 +111,7 @@
     shopStock: [], hover: null,
     msg: "", msgUntil: 0, msgColor: null,
     levelStartT: 0, endReason: "",
-    chasers: 0, vis: null, dev: false, goblin: null, flashT: 0,
+    chasers: 0, vis: null, dev: false, goblin: null, defocusT: 0,
     cue: function () {
       for (var i = 0; i < game.world.balls.length; i++)
         if (game.world.balls[i].color === "cue") return game.world.balls[i];
@@ -287,23 +287,22 @@
     if (s.eightSunk) {
       if (colorsLeft() > 0) return bust("you sank the 8-ball too soon");
       if (s.scratched)      return bust("scratched on the 8-ball. brutal.");
-      // level cleared
-      game.run.money += EIGHT_CASH + CLEAR_CASH;
-      if (game.run.levelIndex >= LEVELS.length - 1) {
-        game.state = "win"; SFX.win();
-      } else {
-        openShop(); SFX.win();
-      }
-      return;
+      return clearLevel();
     }
     if (s.scratched) {
       game.run.money = Math.max(0, game.run.money - SCRATCH_COST);
       respawnCue();
       say("SCRATCH. -$" + SCRATCH_COST + " (hic)", Render.PAL.danger);
     }
-    if (game.run.shots <= 0) {
-      bust("tab ran dry — out of shots");
-    }
+    if (game.run.shots <= 0) return bust("tab ran dry — out of shots");
+    maybeChaser();
+  }
+
+  function clearLevel() {
+    game.run.money += EIGHT_CASH + CLEAR_CASH;
+    SFX.win();
+    if (game.run.levelIndex >= LEVELS.length - 1) game.state = "win";
+    else openShop();
   }
 
   function bust(reason) {
@@ -391,15 +390,20 @@
     game.run.shotsFired++;
     shot = { scratched: false, eightSunk: false, potted: [] };
     SFX.shoot();
+  }
 
-    // every few shots: chaser time. the world tilts a step further.
-    var c2 = Math.floor(game.run.shotsFired / CHASER_EVERY);
-    if (c2 > game.chasers) {
-      game.chasers = c2;
-      game.flashT = tNow;   // screen brightens, then settles back
-      SFX.chaser();
-      say("CHASER DOWNED (hic) — space tilts", Render.PAL.accent, 3200);
-    }
+  /**
+   * Chasers land BETWEEN turns, never mid-shot: the shot you aimed is played
+   * out at the drunkenness you aimed it at, and the next drink hits while the
+   * table is still, so you can see the new geometry before committing.
+   */
+  function maybeChaser() {
+    var c = Math.floor(game.run.shotsFired / CHASER_EVERY);
+    if (c <= game.chasers || drunkF() >= DRUNK_MAX) return;
+    game.chasers = c;
+    game.defocusT = tNow;   // the room goes soft for a second or two
+    SFX.chaser();
+    say("CHASER DOWNED (hic) — space tilts", Render.PAL.accent, 3200);
   }
 
   function onDown(e) {
@@ -493,11 +497,17 @@
     cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp);
     cv.addEventListener("pointercancel", function () { pointer.down = false; game.aim.active = false; });
-    // dev helper (temporary): D toggles the full-trajectory aim line
+    // dev helpers (temporary): D = full-trajectory aim line, N = skip level
     root.addEventListener("keydown", function (e) {
-      if (e.key === "d" || e.key === "D") {
+      var k = e.key.toLowerCase();
+      if (k === "d") {
         game.dev = !game.dev;
         say(game.dev ? "dev path: ON" : "dev path: off", Render.PAL.danger, 1600);
+      } else if (k === "n" && game.state === "play") {
+        audio();
+        shot = null;
+        say("dev skip", Render.PAL.danger, 1200);
+        clearLevel();       // same path as a real clear: pays out, opens the shop
       }
     });
     game.run = { money: 0, levelIndex: 0, shots: 0, shotsFired: 0, items: {},

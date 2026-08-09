@@ -1,0 +1,18 @@
+{
+  "name": "Last Call Billiards",
+  "short_name": "Last Call",
+  "description": "Pixel-art roguelike billiards where space is drunk — shots follow geodesics of a warped metric.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "landscape",
+  "background_color": "#0d0a12",
+  "theme_color": "#0d0a12",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
