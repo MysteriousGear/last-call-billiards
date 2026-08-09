@@ -75,9 +75,47 @@ Random color balls carry a power (pulsing ring + tiny glyph) that triggers
 | PORTAL CORK | spawns a portal pair if none exist |
 
 Simple powers (cash/shot) unlock on level 1; the weird ones join the pool on
-later levels. Planned but not built: the **role-swap ball** (for one turn
-you move the *table* under fixed balls, Baba-Is-You style — pockets sliding
-under balls capture them, and the table keeps its new position).
+later levels. Potting a **portal ball while portals already exist** adds one
+more portal — portals form a cycle (enter *i*, exit *i+1*), so every extra
+portal rewires the whole network. Planned but not built: the **role-swap
+ball** (for one turn you move the *table* under fixed balls, Baba-Is-You
+style — pockets sliding under balls capture them, and the table keeps its
+new position).
+
+### The bartender's mercy
+
+Once per run, the first time the 8-ball drops while colors remain, the
+bartender fishes it out and replaces it near the rack instead of busting
+you. The second time — any level, same run — is a bust. (Scratching on the
+final 8-ball shot is still an immediate bust; mercy covers only the
+too-soon case.)
+
+### Table helpers (random per level)
+
+High warp + a stranded cue ball can be hopeless, so each level rolls
+assists that create playable lines *without* weakening the non-euclidean
+physics itself:
+
+| Helper | Behavior |
+|---|---|
+| **Euclidean patch** | pale dashed rectangle where geometry is flat: balls travel straight until they exit; the grid inside is visibly still |
+| **Bridge** | wooden causeway, euclidean deck, railings on the long edges that balls bounce off — a guided corridor across drunk space |
+| **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
+| **Bar cat** | once per level, while the table is at rest, a tabby strolls up and paws a color ball (or the lone 8-ball) toward the nearest pocket. It aims straight; drunk space may disagree |
+
+Level 1 gets one zone; levels 2–3 get a bridge plus a patch. The crane dock
+appears with 60% probability. Zones affect the aim tracer identically to
+the physics (the preview stays honest), and cat/crane pots pay out like any
+other pot.
+
+### Ambience toggles
+
+Two toggles, as HUD corner buttons (mobile) and keys (desktop):
+
+- **GLASS** (`T`): the felt turns translucent and the psychedelic backdrop
+  shows through the table.
+- **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
+  whole world layer. HUD text stays sober.
 
 ### Ambience
 

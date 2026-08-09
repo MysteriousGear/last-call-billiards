@@ -50,11 +50,15 @@
     return hit;
   }
 
-  /** Portal transit for a ball-like object. Returns index entered, or -1. */
+  /**
+   * Portal transit for a ball-like object. Returns index entered, or -1.
+   * With more than two portals they form a cycle: enter portal i, exit
+   * portal i+1 — so every extra portal rewires the whole network.
+   */
   function portals(world, o, r) {
     var ps = world.portals;
-    if (!ps || ps.length !== 2) return -1;
-    for (var i = 0; i < 2; i++) {
+    if (!ps || ps.length < 2) return -1;
+    for (var i = 0; i < ps.length; i++) {
       var p = ps[i];
       var d = Math.hypot(o.x - p.x, o.y - p.y);
       if (o.portalCd === i) {           // must fully leave the exit first
@@ -62,28 +66,85 @@
         continue;
       }
       if (d < p.r) {
-        var q = ps[1 - i];
+        var j = (i + 1) % ps.length;
+        var q = ps[j];
         var sp = Math.hypot(o.vx, o.vy) || 1;
         var ux = o.vx / sp, uy = o.vy / sp;
         o.x = q.x + ux * (q.r + r + 2);  // pop out the far side, same heading
         o.y = q.y + uy * (q.r + r + 2);
-        o.portalCd = 1 - i;
+        o.portalCd = j;
         return i;
       }
     }
     return -1;
   }
 
+  /* ── zones: patches of the table where geometry behaves ──────────────── */
+
+  /** True when (x,y) is inside any euclidean zone (patch or bridge deck):
+      no geodesic bending there — shots run straight until they leave. */
+  function inEuclid(world, x, y) {
+    var zs = world.zones;
+    if (!zs) return false;
+    for (var i = 0; i < zs.length; i++) {
+      var z = zs[i];
+      if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) return true;
+    }
+    return false;
+  }
+
+  /** One railing: a wall segment balls bounce off from either side. */
+  function railHitH(o, r, e, x0, x1, y, events, b) {
+    if (o.x < x0 - r || o.x > x1 + r) return;
+    var d = o.y - y;
+    if (Math.abs(d) >= r) return;
+    o.y = y + (d >= 0 ? r : -r);
+    if (d >= 0 ? o.vy < 0 : o.vy > 0) {
+      o.vy = -o.vy * e;
+      if (events) events.push({ t: "cushion", b: b });
+    }
+  }
+  function railHitV(o, r, e, y0, y1, x, events, b) {
+    if (o.y < y0 - r || o.y > y1 + r) return;
+    var d = o.x - x;
+    if (Math.abs(d) >= r) return;
+    o.x = x + (d >= 0 ? r : -r);
+    if (d >= 0 ? o.vx < 0 : o.vx > 0) {
+      o.vx = -o.vx * e;
+      if (events) events.push({ t: "cushion", b: b });
+    }
+  }
+
+  /** Bridge railings: the two long edges of a bridge reflect balls. */
+  function zoneWalls(world, o, r, e, events, b) {
+    var zs = world.zones;
+    if (!zs) return;
+    for (var i = 0; i < zs.length; i++) {
+      var z = zs[i];
+      if (z.type !== "bridge") continue;
+      if (z.axis === "h") {
+        railHitH(o, r, e, z.x, z.x + z.w, z.y, events, b);
+        railHitH(o, r, e, z.x, z.x + z.w, z.y + z.h, events, b);
+      } else {
+        railHitV(o, r, e, z.y, z.y + z.h, z.x, events, b);
+        railHitV(o, r, e, z.y, z.y + z.h, z.x + z.w, events, b);
+      }
+    }
+  }
+
   function stepOne(world, b, dt, events) {
     var sp = speed(b);
     if (sp === 0) return;
 
-    // geodesic bend, then advance
-    var d = Geo.bendDir(world.field, b.x, b.y, b.vx / sp, b.vy / sp, sp * dt);
-    b.vx = d.x * sp;
-    b.vy = d.y * sp;
+    // geodesic bend (unless standing on euclidean ground), then advance
+    if (!inEuclid(world, b.x, b.y)) {
+      var d = Geo.bendDir(world.field, b.x, b.y, b.vx / sp, b.vy / sp, sp * dt);
+      b.vx = d.x * sp;
+      b.vy = d.y * sp;
+    }
     b.x += b.vx * dt;
     b.y += b.vy * dt;
+    zoneWalls(world, b, b.r, CUSHION_E, events, b);
 
     // "rails are one big pocket" mode: touching a cushion pots the ball
     if (world.railMouth > 0) {
@@ -177,10 +238,13 @@
     var hit = null;
 
     for (var s = 0; s < maxLen; s += ds) {
-      var d = Geo.bendDir(world.field, o.x, o.y, o.vx, o.vy, ds);
-      o.vx = d.x; o.vy = d.y;
+      if (!inEuclid(world, o.x, o.y)) {
+        var d = Geo.bendDir(world.field, o.x, o.y, o.vx, o.vy, ds);
+        o.vx = d.x; o.vy = d.y;
+      }
       o.x += o.vx * ds;
       o.y += o.vy * ds;
+      zoneWalls(world, o, ballR, 1, null, null);
       if (world.railMouth > 0) {
         var rc = world.rect;
         if (o.x < rc.x + ballR || o.x > rc.x + rc.w - ballR ||
@@ -224,6 +288,7 @@
     speed: speed,
     anyMoving: anyMoving,
     tracePath: tracePath,
+    inEuclid: inEuclid,
     FRICTION: FRICTION,
   };
 })(typeof window !== "undefined" ? window : globalThis);

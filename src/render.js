@@ -12,6 +12,7 @@
 (function (root) {
   "use strict";
   var Geo = root.Geo;
+  var Phys = root.Phys;
 
   var BW = 400, BH = 225;
 
@@ -282,9 +283,116 @@
     }
   }
 
+  /* ── zones, dock, crane, cat ─────────────────────────────────────────── */
+
+  function inBridge(world, x, y) {
+    var zs = world.zones;
+    if (!zs) return false;
+    for (var i = 0; i < zs.length; i++) {
+      var z = zs[i];
+      if (z.type === "bridge" && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h)
+        return true;
+    }
+    return false;
+  }
+
+  function drawZones(game, t) {
+    var zs = game.world.zones;
+    if (!zs) return;
+    for (var i = 0; i < zs.length; i++) {
+      var z = zs[i];
+      if (z.type === "bridge") {
+        // wooden deck with bright railings on the long edges
+        fill(z.x, z.y, z.w, z.h, PAL.rail);
+        for (var px = z.x; px < z.x + z.w; px += 6)   // plank seams
+          fill(px, z.y, 1, z.h, PAL.railDark);
+        if (z.axis === "h") {
+          fill(z.x, z.y, z.w, 2, PAL.railLight);
+          fill(z.x, z.y + z.h - 2, z.w, 2, PAL.railLight);
+        } else {
+          fill(z.x, z.y, 2, z.h, PAL.railLight);
+          fill(z.x + z.w - 2, z.y, 2, z.h, PAL.railLight);
+        }
+      } else {
+        // euclidean patch: a pale calm island — dashed border, still grid
+        bctx.globalAlpha = 0.08;
+        fill(z.x, z.y, z.w, z.h, "#cfd8ff");
+        bctx.globalAlpha = 0.5;
+        bctx.fillStyle = "#7fd6c0";
+        var s;
+        for (s = 0; s < z.w; s += 4) {
+          bctx.fillRect((z.x + s) | 0, z.y | 0, 2, 1);
+          bctx.fillRect((z.x + s) | 0, (z.y + z.h) | 0, 2, 1);
+        }
+        for (s = 0; s < z.h; s += 4) {
+          bctx.fillRect(z.x | 0, (z.y + s) | 0, 1, 2);
+          bctx.fillRect((z.x + z.w) | 0, (z.y + s) | 0, 1, 2);
+        }
+        bctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawDockAndCrane(game, t) {
+    var cr = game.world.crane;
+    if (cr) {
+      var col = cr.used ? "#5a5346" : PAL.pocketRim;
+      if (!cr.used) {
+        bctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3);
+        pixRing(cr.x, cr.y, cr.r + 2, col, t * 1.5);
+      }
+      bctx.globalAlpha = cr.used ? 0.4 : 1;
+      pixRing(cr.x, cr.y, cr.r, col);
+      fill(cr.x - 1, cr.y - 3, 1, 4, col);   // little hook glyph
+      fill(cr.x - 2, cr.y, 3, 1, col);
+      bctx.globalAlpha = 1;
+    }
+    var ca = game.craneAnim;
+    if (ca) {
+      var p = Math.min(1, (t - ca.t0) / ca.dur);
+      var e = p * p * (3 - 2 * p);           // smoothstep
+      var x = ca.from.x + (ca.to.x - ca.from.x) * e;
+      var y = ca.from.y + (ca.to.y - ca.from.y) * e;
+      var lift = Math.sin(Math.min(1, p * 1.15) * Math.PI) * 7;
+      fill(x, 0, 1, y - lift, "#8a8378");    // the cable, from way up high
+      bctx.globalAlpha = 0.35;               // shadow stays on the felt
+      pixCircle(x, y, 3, "#07070c");
+      bctx.globalAlpha = 1;
+      drawBall({ x: x, y: y - lift, r: ca.b.r, color: ca.b.color, sunk: false }, t);
+      fill(x - 2, y - lift - ca.b.r - 2, 5, 2, "#8a8378"); // the claw
+    }
+  }
+
+  function drawCat(game, t) {
+    var cat = game.cat;
+    if (!cat) return;
+    var age = t - cat.t0;
+    var x = Math.round(cat.x), y = Math.round(cat.y);
+    bctx.globalAlpha = age > 2.0 ? Math.max(0, (2.4 - age) / 0.4) : 1;
+
+    // tabby: body, head, ears, stripes, tail with a mind of its own
+    fill(x - 5, y - 2, 9, 5, "#e8963e");
+    fill(x - 4, y - 1, 2, 1, "#b06a24"); fill(x - 1, y - 1, 2, 1, "#b06a24");
+    fill(x + 2, y - 5, 5, 5, "#e8963e");
+    fill(x + 2, y - 6, 1, 2, "#e8963e"); fill(x + 6, y - 6, 1, 2, "#e8963e");
+    fill(x + 3, y - 4, 1, 1, "#1a1a20"); fill(x + 5, y - 4, 1, 1, "#1a1a20");
+    var tw = Math.round(Math.sin(t * 5) * 2);
+    fill(x - 7, y - 3 + tw, 2, 1, "#e8963e");
+    fill(x - 8, y - 4 + tw, 2, 1, "#b06a24");
+
+    // the paw reaches out during the wind-up, swipes at 0.9s
+    var reach = age < 0.9 ? age / 0.9 * 6 : Math.max(0, 6 - (age - 0.9) * 20);
+    if (reach > 0.5)
+      fill(Math.round(x + 6 + cat.dir.x * reach), Math.round(y - 1 + cat.dir.y * reach),
+           2, 2, "#f6e3c0");
+    bctx.globalAlpha = 1;
+  }
+
   /* ── world drawing ───────────────────────────────────────────────────── */
 
   function visualDisp(game, x, y, t) {
+    // euclidean ground: the grid is dead straight there — that's the point
+    if (Phys.inEuclid(game.world, x, y)) return { x: 0, y: 0 };
     var vis = game.vis || game.level.visuals;
     var g = Geo.grad(game.world.field, x, y);
     var dx = g.x * vis.gridWarp * 90;
@@ -315,8 +423,11 @@
       bctx.globalAlpha = 1;
     }
 
-    // felt
+    // felt — glass mode lets the psychedelic night show through it
+    var glassMul = game.glass ? 0.3 : 1;
+    bctx.globalAlpha = glassMul;
     fill(rect.x, rect.y, rect.w, rect.h, PAL.feltBase);
+    bctx.globalAlpha = 1;
 
     // warp contour tint: the "spilled drinks" — hills lighter, wells darker.
     var cell = 4;
@@ -324,12 +435,14 @@
       for (var x = rect.x; x < rect.x + rect.w; x += cell) {
         var v = Geo.phi(game.world.field, x + 2, y + 2);
         if (Math.abs(v) < 0.06) continue;
-        bctx.globalAlpha = Math.min(0.5, Math.abs(v) * 0.6);
+        bctx.globalAlpha = Math.min(0.5, Math.abs(v) * 0.6) * glassMul;
         bctx.fillStyle = v > 0 ? PAL.feltHill : PAL.feltWell;
         bctx.fillRect(x, y, cell, cell);
       }
     }
     bctx.globalAlpha = 1;
+
+    drawZones(game, t);
 
     // grid lines, displaced by the visual warp (this is what "swims")
     bctx.fillStyle = PAL.grid;
@@ -339,7 +452,8 @@
       for (gy = rect.y; gy < rect.y + rect.h; gy += 2) {
         p = visualDisp(game, gx, gy, t);
         var px = gx + p.x, py = gy + p.y;
-        if (px > rect.x && px < rect.x + rect.w - 1 && py > rect.y && py < rect.y + rect.h - 1)
+        if (px > rect.x && px < rect.x + rect.w - 1 && py > rect.y && py < rect.y + rect.h - 1
+            && !inBridge(game.world, px, py))
           bctx.fillRect(px | 0, py | 0, 1, 1);
       }
     }
@@ -347,7 +461,8 @@
       for (gx = rect.x; gx < rect.x + rect.w; gx += 2) {
         p = visualDisp(game, gx, gy, t);
         var qx = gx + p.x, qy = gy + p.y;
-        if (qx > rect.x && qx < rect.x + rect.w - 1 && qy > rect.y && qy < rect.y + rect.h - 1)
+        if (qx > rect.x && qx < rect.x + rect.w - 1 && qy > rect.y && qy < rect.y + rect.h - 1
+            && !inBridge(game.world, qx, qy))
           bctx.fillRect(qx | 0, qy | 0, 1, 1);
       }
     }
@@ -360,16 +475,19 @@
       pixRing(pk.x, pk.y, pk.r, PAL.pocketRim);
     }
 
-    // portals
+    // portals — a cycle of any length; each gets its own color
     var ps = game.world.portals;
-    if (ps && ps.length === 2) {
-      var pc = ["#ff8a2a", "#37b6ff"];
-      for (i = 0; i < 2; i++) {
+    if (ps && ps.length >= 2) {
+      var pc = ["#ff8a2a", "#37b6ff", "#c05fd6", "#3fbf5f", "#f2c230", "#ff5f8a"];
+      for (i = 0; i < ps.length; i++) {
+        var col = pc[i % pc.length];
         pixCircle(ps[i].x, ps[i].y, ps[i].r - 2, "#120a1c");
-        pixRing(ps[i].x, ps[i].y, ps[i].r, pc[i], t * 2.4);
-        pixRing(ps[i].x, ps[i].y, ps[i].r - 2, pc[i], -t * 3.2);
+        pixRing(ps[i].x, ps[i].y, ps[i].r, col, t * 2.4);
+        pixRing(ps[i].x, ps[i].y, ps[i].r - 2, col, -t * 3.2);
       }
     }
+
+    drawDockAndCrane(game, t);
   }
 
   var SPECIAL_TINT = {
@@ -436,8 +554,13 @@
     }
   }
 
-  function drawHud(game) {
+  function drawHud(game, t) {
     var run = game.run, lv = game.level;
+
+    // ambience toggles, tucked into the bottom corners
+    button("glass", 4, 212, 46, 11, "GLASS", game.glass || game.hover === "glass", 5);
+    button("trip", BW - 50, 212, 46, 11, "TRIP", game.trip || game.hover === "trip", 5);
+
     text("LVL " + (run.levelIndex + 1) + "/3", 18, 8, 7, PAL.dim);
     text(lv.name, 74, 8, 7, PAL.accent);
     text("$" + run.money, 382, 8, 7, PAL.ok, "right");
@@ -550,8 +673,9 @@
     if (inWorld) {
       drawTable(game, t);
       for (var i = 0; i < game.world.balls.length; i++) drawBall(game.world.balls[i], t);
+      drawCat(game, t);
       drawGoblin(game, t);
-      if (game.state === "play") { drawAim(game, t); drawHud(game); drawBanner(game, t); }
+      if (game.state === "play") { drawAim(game, t); drawHud(game, t); drawBanner(game, t); }
     }
     if (game.state === "title") drawTitle(game, t);
     if (game.state === "shop") drawShop(game);
@@ -572,9 +696,12 @@
                           BW * scale, BH * scale);
       dctx.globalAlpha = 1;
     }
-    // chaser defocus: your eyes lose the table for a second, then refocus
+    // chaser defocus + psychedelic hue drift, applied together on the blit
+    var parts = [];
     var blur = defocusPx(game, t);
-    if (blur > 0) dctx.filter = "blur(" + blur.toFixed(2) + "px)";
+    if (blur > 0) parts.push("blur(" + blur.toFixed(2) + "px)");
+    if (game.trip) parts.push("hue-rotate(" + ((t * 9) % 360).toFixed(1) + "deg)");
+    if (parts.length) dctx.filter = parts.join(" ");
     dctx.drawImage(buf, offX + wx, offY + wy, BW * scale, BH * scale);
     dctx.filter = "none";
 
