@@ -99,9 +99,9 @@ physics itself:
 | Helper | Behavior |
 |---|---|
 | **Euclidean patch** | pale dashed rectangle where geometry is flat: balls travel straight until they exit; the grid inside is visibly still |
-| **Bridge** | wooden causeway, euclidean deck, railings on the long edges that balls bounce off — a guided corridor across drunk space |
+| **Bridge** | wooden causeway, euclidean deck, railings on the long edges that balls bounce off. Its long axis is **aimed at a pocket** and its far end stops ~24px short, so riding the corridor leaves you pointed at the hole with one stretch of drunk space still to survive — measured ~66% pot rate over sloppy entries at high warp |
 | **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
-| **Bar cat** | once per level, while the table is at rest, a tabby strolls up and paws a color ball (or the lone 8-ball) toward the nearest pocket. It aims straight; drunk space may disagree |
+| **Bar cat** | once per level, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, paws a color ball (or the lone 8-ball) toward the nearest pocket, then fades out the same way. It aims straight; drunk space may disagree |
 
 Level 1 gets one zone; levels 2–3 get a bridge plus a patch. The crane dock
 appears with 60% probability. Zones affect the aim tracer identically to
@@ -112,8 +112,12 @@ other pot.
 
 Two toggles, as HUD corner buttons (mobile) and keys (desktop):
 
-- **GLASS** (`T`): the felt turns translucent and the psychedelic backdrop
-  shows through the table.
+- **GLASS** (`T`): the felt and the wooden rails disappear entirely, leaving
+  a minimal pale chassis (playfield outline + outer frame + corner brackets).
+  The backdrop — stars, nebula, jellyfish, drifting equations — is brightened
+  ~2x and shows straight through the table. Several backdrop actors are
+  positioned to cross the table's own band so there is something to see.
+  Pockets keep their rims, the warp tint and grid stay faint but readable.
 - **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
   whole world layer. HUD text stays sober.
 

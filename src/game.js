@@ -174,7 +174,7 @@
       pockets: pocketSet(game.run.pocketBonus),
       portals: [],
       railMouth: 0,
-      zones: makeZones(idx),
+      zones: [],
       crane: Math.random() < 0.6 ? {
         x: RECT.x + RECT.w * (0.28 + Math.random() * 0.3),
         y: RECT.y + RECT.h * (0.25 + Math.random() * 0.5),
@@ -214,6 +214,9 @@
       candidates.splice(bi, 1)[0].special = tier.splice(si, 1)[0];
     }
 
+    // zones last: they need the final ball positions to route around
+    world.zones = makeZones(idx, world);
+
     if (def.portals) spawnPortals(world);
 
     game.world = world;
@@ -227,32 +230,81 @@
    * geometry is honest-to-goodness euclidean. A stranded cue ball can be
    * threaded through one of these to cross drunk space in a straight line.
    */
-  function makeZones(idx) {
+  function makeZones(idx, world) {
     var zones = [];
     var count = idx === 0 ? 1 : 2;
     for (var i = 0; i < count; i++) {
-      var bridge = idx > 0 && i === 0;   // later levels always get one bridge
-      if (bridge) {
-        var horiz = Math.random() < 0.7;
-        var w = horiz ? 80 + Math.random() * 30 : 22 + Math.random() * 4;
-        var h = horiz ? 22 + Math.random() * 4 : 60 + Math.random() * 26;
-        zones.push({
-          type: "bridge", axis: horiz ? "h" : "v",
-          w: w, h: h,
-          x: RECT.x + 24 + Math.random() * (RECT.w * 0.6 - w),
-          y: RECT.y + 18 + Math.random() * (RECT.h - 36 - h),
-        });
-      } else {
-        var pw = 58 + Math.random() * 32, ph = 40 + Math.random() * 20;
-        zones.push({
-          type: "euclid",
-          w: pw, h: ph,
-          x: RECT.x + 20 + Math.random() * (RECT.w * 0.65 - pw),
-          y: RECT.y + 14 + Math.random() * (RECT.h - 28 - ph),
-        });
+      var want = idx > 0 && i === 0;   // later levels always get one bridge
+      var z = null;
+      for (var t = 0; t < 24 && !z; t++) {
+        var cand = want ? bridgeToPocket(world) : euclidPatch();
+        if (!zoneBlocked(cand, world, zones)) z = cand;
       }
+      if (z) zones.push(z);
     }
     return zones;
+  }
+
+  /**
+   * A bridge is only worth crossing if it goes somewhere: aim its long axis
+   * at a pocket and stop the far end ~24px short, so a ball that rides the
+   * corridor exits pointed at the hole but still has to survive the last
+   * stretch of drunk space. Roughly a coin flip, which is the idea.
+   */
+  function bridgeToPocket(world) {
+    var pk = world.pockets[Math.floor(Math.random() * world.pockets.length)];
+    var cx = RECT.x + RECT.w / 2, cy = RECT.y + RECT.h / 2;
+    var dx = pk.x - cx, dy = pk.y - cy;
+    var deck = 15, len = 76 + Math.random() * 26, gap = 24;
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // corner pocket: a horizontal run hugging the near rail
+      var y = clamp(pk.y - deck / 2, RECT.y + 1, RECT.y + RECT.h - deck - 1);
+      var x = dx < 0 ? pk.x + gap : pk.x - gap - len;
+      return { type: "bridge", axis: "h", aimAt: pk,
+               x: clamp(x, RECT.x + 2, RECT.x + RECT.w - len - 2),
+               y: y, w: len, h: deck };
+    }
+    // side pocket: a vertical run straight down the middle column
+    var vx = clamp(pk.x - deck / 2, RECT.x + 1, RECT.x + RECT.w - deck - 1);
+    var vy = dy < 0 ? pk.y + gap : pk.y - gap - len;
+    return { type: "bridge", axis: "v", aimAt: pk,
+             x: vx, y: clamp(vy, RECT.y + 2, RECT.y + RECT.h - len - 2),
+             w: deck, h: len };
+  }
+
+  function euclidPatch() {
+    var pw = 58 + Math.random() * 32, ph = 40 + Math.random() * 20;
+    return {
+      type: "euclid", w: pw, h: ph,
+      x: RECT.x + 20 + Math.random() * (RECT.w * 0.65 - pw),
+      y: RECT.y + 14 + Math.random() * (RECT.h - 28 - ph),
+    };
+  }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  /** Reject a zone that would trap a ball inside a railing or overlap another. */
+  function zoneBlocked(z, world, placed) {
+    var i;
+    if (z.type === "bridge") {
+      for (i = 0; i < world.balls.length; i++) {
+        var b = world.balls[i];
+        // a ball sitting on the deck is fine; sitting ON a railing is not
+        var nearX = b.x > z.x - BALL_R * 2 && b.x < z.x + z.w + BALL_R * 2;
+        var nearY = b.y > z.y - BALL_R * 2 && b.y < z.y + z.h + BALL_R * 2;
+        if (!nearX || !nearY) continue;
+        if (z.axis === "h" &&
+            (Math.abs(b.y - z.y) < BALL_R + 2 || Math.abs(b.y - (z.y + z.h)) < BALL_R + 2)) return true;
+        if (z.axis === "v" &&
+            (Math.abs(b.x - z.x) < BALL_R + 2 || Math.abs(b.x - (z.x + z.w)) < BALL_R + 2)) return true;
+      }
+    }
+    for (i = 0; i < placed.length; i++) {
+      var o = placed[i];
+      if (z.x < o.x + o.w && z.x + z.w > o.x && z.y < o.y + o.h && z.y + z.h > o.y) return true;
+    }
+    return false;
   }
 
   function spawnPortals(world) {
@@ -714,6 +766,9 @@
     Render.frame(game, tNow);
     requestAnimationFrame(frame);
   }
+
+  // test hook: lets the headless harness exercise level generation
+  root.Game = { _test: { makeZones: makeZones, pocketSet: pocketSet, RECT: RECT, BALL_R: BALL_R } };
 
   /* ── boot ────────────────────────────────────────────────────────────── */
 

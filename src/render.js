@@ -57,11 +57,17 @@
     { x: 9, y: 208, r: 8, sp: 0.5 }, { x: 391, y: 14, r: 10, sp: -0.35 },
     { x: 6, y: 16, r: 6, sp: 0.7 },
   ];
+  // Several of these drift across the table's own band (y 44..186) so the
+  // glass table has something worth looking at underneath it.
   var EQNS = [
     { s: "ds²=e²ᵠ(dx²+dy²)", x: 40, y: 14, sp: 3 },
     { s: "k=∇φ·n̂", x: 300, y: 218, sp: -4 },
     { s: "φ→∞ ?", x: 180, y: 222, sp: 5 },
     { s: "R³⋉(hic)", x: 250, y: 10, sp: -2.5 },
+    { s: "∮ dθ = 2π − ∬K dA", x: 20, y: 62, sp: 2.2 },
+    { s: "exp(−r²/2σ²)", x: 260, y: 108, sp: -3.4 },
+    { s: "K = −e^{−2φ}Δφ", x: 120, y: 156, sp: 2.8 },
+    { s: "one more?", x: 330, y: 132, sp: -1.8 },
   ];
 
   function initBackdrop() {
@@ -73,8 +79,11 @@
       blobs.push({ x: Math.random() * BW, y: Math.random() * BH,
                    r: 8 + Math.random() * 16, ph: Math.random() * 6.28,
                    sp: 0.06 + Math.random() * 0.1, warm: i % 2 === 0 });
-    jellies.push({ x: 12, y: 150, ph: Math.random() * 6 });
-    jellies.push({ x: 388, y: 80, ph: Math.random() * 6 });
+    // spread across the width, not just the margins, so they swim behind
+    // the table and are visible once the felt turns to glass
+    [12, 96, 188, 286, 388].forEach(function (x) {
+      jellies.push({ x: x, y: Math.random() * 225, ph: Math.random() * 6 });
+    });
   }
 
   function init(cv) {
@@ -191,23 +200,24 @@
 
   /* ── backdrop: the bar is having its own night ───────────────────────── */
 
-  function drawBackdrop(t) {
+  /** `k` brightens the whole backdrop — glass mode turns the night up. */
+  function drawBackdrop(t, k) {
     var i;
     // nebula fog
     for (i = 0; i < blobs.length; i++) {
       var bl = blobs[i];
       var bx = bl.x + Math.sin(t * bl.sp + bl.ph) * 14;
       var by = bl.y + Math.cos(t * bl.sp * 0.7 + bl.ph) * 9;
-      bctx.globalAlpha = 0.07;
+      bctx.globalAlpha = 0.07 * k;
       pixCircle(bx, by, bl.r, bl.warm ? "#7a3fa0" : "#2f4aa0");
-      bctx.globalAlpha = 0.05;
+      bctx.globalAlpha = 0.05 * k;
       pixCircle(bx + 3, by - 2, bl.r * 0.6, bl.warm ? "#c05fd6" : "#3fa0c0");
     }
     bctx.globalAlpha = 1;
     // stars
     for (i = 0; i < stars.length; i++) {
       var s = stars[i];
-      bctx.globalAlpha = 0.18 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.8 + s.tw));
+      bctx.globalAlpha = Math.min(1, (0.18 + 0.3 * (0.5 + 0.5 * Math.sin(t * 1.8 + s.tw))) * k);
       bctx.fillStyle = "#cfd8ff";
       bctx.fillRect(s.x | 0, s.y | 0, s.big ? 2 : 1, s.big ? 2 : 1);
     }
@@ -215,39 +225,42 @@
     // slow gears
     for (i = 0; i < GEARS.length; i++) {
       var g = GEARS[i];
-      bctx.globalAlpha = 0.22;
+      bctx.globalAlpha = Math.min(1, 0.22 * k);
       pixRing(g.x, g.y, g.r, "#8a7aa0");
       bctx.fillStyle = "#8a7aa0";
-      for (var k = 0; k < 6; k++) {
-        var a = t * g.sp + (k / 6) * Math.PI * 2;
+      for (var k2 = 0; k2 < 6; k2++) {
+        var a = t * g.sp + (k2 / 6) * Math.PI * 2;
         bctx.fillRect(Math.round(g.x + Math.cos(a) * (g.r + 2)),
                       Math.round(g.y + Math.sin(a) * (g.r + 2)), 2, 2);
       }
       bctx.fillRect(g.x, g.y, 1, 1);
     }
     bctx.globalAlpha = 1;
-    // jellyfish drifting up the margins
+    // jellyfish drifting up through the room
     for (i = 0; i < jellies.length; i++) {
       var j = jellies[i];
       var jy = ((j.y - t * 4 + j.ph * 20) % (BH + 30) + BH + 30) % (BH + 30) - 15;
       var jx = j.x + Math.sin(t * 0.8 + j.ph) * 4;
-      bctx.globalAlpha = 0.3;
-      pixCircle(jx, jy, 4, "#c05fd6");
-      bctx.fillStyle = "#0d0a12";
-      bctx.fillRect((jx - 4) | 0, (jy + 1) | 0, 9, 4); // trim to a dome
+      bctx.globalAlpha = Math.min(1, 0.3 * k);
+      // dome, drawn as rows so it never has to paint over the stars behind it
+      bctx.fillStyle = "#c05fd6";
+      for (var dy = -4; dy <= 0; dy++) {
+        var hw = Math.floor(Math.sqrt(16 - dy * dy));
+        bctx.fillRect((jx - hw) | 0, (jy + dy) | 0, hw * 2 + 1, 1);
+      }
       bctx.fillStyle = "#d69aff";
       for (var q = 0; q < 3; q++)
         bctx.fillRect(Math.round(jx - 2 + q * 2 + Math.sin(t * 3 + q + j.ph) * 1.5),
-                      (jy + 2 + ((q + t * 6) | 0) % 3) | 0, 1, 3);
+                      (jy + 1 + ((q + t * 6) | 0) % 3) | 0, 1, 3);
     }
     bctx.globalAlpha = 1;
     // drifting equations
     bctx.font = "7px monospace";
-    bctx.globalAlpha = 0.28;
+    bctx.globalAlpha = Math.min(1, 0.28 * k);
     bctx.fillStyle = "#9a8fc0";
     for (i = 0; i < EQNS.length; i++) {
       var eq = EQNS[i];
-      var ex = ((eq.x + t * eq.sp) % (BW + 90) + BW + 90) % (BW + 90) - 45;
+      var ex = ((eq.x + t * eq.sp) % (BW + 120) + BW + 120) % (BW + 120) - 60;
       bctx.fillText(eq.s, ex, eq.y);
     }
     bctx.globalAlpha = 1;
@@ -299,13 +312,16 @@
   function drawZones(game, t) {
     var zs = game.world.zones;
     if (!zs) return;
+    var base = game.glass ? 0.45 : 1;
     for (var i = 0; i < zs.length; i++) {
       var z = zs[i];
       if (z.type === "bridge") {
         // wooden deck with bright railings on the long edges
+        bctx.globalAlpha = base;
         fill(z.x, z.y, z.w, z.h, PAL.rail);
         for (var px = z.x; px < z.x + z.w; px += 6)   // plank seams
           fill(px, z.y, 1, z.h, PAL.railDark);
+        bctx.globalAlpha = Math.min(1, base + 0.35);  // railings stay readable
         if (z.axis === "h") {
           fill(z.x, z.y, z.w, 2, PAL.railLight);
           fill(z.x, z.y + z.h - 2, z.w, 2, PAL.railLight);
@@ -315,7 +331,7 @@
         }
       } else {
         // euclidean patch: a pale calm island — dashed border, still grid
-        bctx.globalAlpha = 0.08;
+        bctx.globalAlpha = 0.08 * base;
         fill(z.x, z.y, z.w, z.h, "#cfd8ff");
         bctx.globalAlpha = 0.5;
         bctx.fillStyle = "#7fd6c0";
@@ -328,9 +344,9 @@
           bctx.fillRect(z.x | 0, (z.y + s) | 0, 1, 2);
           bctx.fillRect((z.x + z.w) | 0, (z.y + s) | 0, 1, 2);
         }
-        bctx.globalAlpha = 1;
       }
     }
+    bctx.globalAlpha = 1;
   }
 
   function drawDockAndCrane(game, t) {
@@ -367,8 +383,13 @@
     var cat = game.cat;
     if (!cat) return;
     var age = t - cat.t0;
-    var x = Math.round(cat.x), y = Math.round(cat.y);
-    bctx.globalAlpha = age > 2.0 ? Math.max(0, (2.4 - age) / 0.4) : 1;
+    // pads in as softly as it pads out
+    var fade = Math.max(0, Math.min(1, age / 0.4, (2.4 - age) / 0.4));
+    if (fade <= 0) return;
+    bctx.globalAlpha = fade;
+    // and it walks the last few pixels in, rather than blinking into place
+    var x = Math.round(cat.x - (1 - Math.min(1, age / 0.4)) * cat.dir.x * 9);
+    var y = Math.round(cat.y - (1 - Math.min(1, age / 0.4)) * cat.dir.y * 9);
 
     // tabby: body, head, ears, stripes, tail with a mind of its own
     fill(x - 5, y - 2, 9, 5, "#e8963e");
@@ -404,14 +425,41 @@
     return { x: dx, y: dy };
   }
 
+  /** Glass mode: no wood, no felt — a minimal pale chassis holding the void. */
+  function drawGlassFrame(rect, rail) {
+    var C = "#c8d2d8", D = "#6d7a82";
+    var x0 = rect.x - rail, y0 = rect.y - rail;
+    var w = rect.w + rail * 2, h = rect.h + rail * 2;
+    bctx.globalAlpha = 0.5;
+    fill(x0, y0, w, 1, D); fill(x0, y0 + h - 1, w, 1, D);
+    fill(x0, y0, 1, h, D); fill(x0 + w - 1, y0, 1, h, D);
+    bctx.globalAlpha = 0.85;
+    fill(rect.x - 1, rect.y - 1, rect.w + 2, 1, C);
+    fill(rect.x - 1, rect.y + rect.h, rect.w + 2, 1, C);
+    fill(rect.x - 1, rect.y - 1, 1, rect.h + 2, C);
+    fill(rect.x + rect.w, rect.y - 1, 1, rect.h + 2, C);
+    // corner brackets tying the playfield to the outer chassis
+    [[x0, y0, 1, 1], [x0 + w - 1, y0, -1, 1],
+     [x0, y0 + h - 1, 1, -1], [x0 + w - 1, y0 + h - 1, -1, -1]]
+      .forEach(function (c) {
+        for (var i = 0; i < rail; i++)
+          bctx.fillRect(c[0] + c[2] * i, c[1] + c[3] * i, 1, 1);
+      });
+    bctx.globalAlpha = 1;
+  }
+
   function drawTable(game, t) {
     var rect = game.world.rect;
     var rail = 10;
 
-    // rails
-    fill(rect.x - rail, rect.y - rail, rect.w + rail * 2, rect.h + rail * 2, PAL.rail);
-    fill(rect.x - rail, rect.y - rail, rect.w + rail * 2, 2, PAL.railLight);
-    fill(rect.x - rail, rect.y + rect.h + rail - 2, rect.w + rail * 2, 2, PAL.railDark);
+    // rails — in glass mode the wood is gone, leaving a wireframe chassis
+    if (game.glass) {
+      drawGlassFrame(rect, rail);
+    } else {
+      fill(rect.x - rail, rect.y - rail, rect.w + rail * 2, rect.h + rail * 2, PAL.rail);
+      fill(rect.x - rail, rect.y - rail, rect.w + rail * 2, 2, PAL.railLight);
+      fill(rect.x - rail, rect.y + rect.h + rail - 2, rect.w + rail * 2, 2, PAL.railDark);
+    }
 
     // rails-are-a-pocket mode: the whole frame goes hungry and dark
     if (game.world.railMouth > 0) {
@@ -423,11 +471,9 @@
       bctx.globalAlpha = 1;
     }
 
-    // felt — glass mode lets the psychedelic night show through it
-    var glassMul = game.glass ? 0.3 : 1;
-    bctx.globalAlpha = glassMul;
-    fill(rect.x, rect.y, rect.w, rect.h, PAL.feltBase);
-    bctx.globalAlpha = 1;
+    // felt — in glass mode there is no felt at all, just the night behind it
+    var glassMul = game.glass ? 0.22 : 1;
+    if (!game.glass) fill(rect.x, rect.y, rect.w, rect.h, PAL.feltBase);
 
     // warp contour tint: the "spilled drinks" — hills lighter, wells darker.
     var cell = 4;
@@ -445,8 +491,8 @@
     drawZones(game, t);
 
     // grid lines, displaced by the visual warp (this is what "swims")
-    bctx.fillStyle = PAL.grid;
-    bctx.globalAlpha = 0.55;
+    bctx.fillStyle = game.glass ? "#9fd8ff" : PAL.grid;
+    bctx.globalAlpha = game.glass ? 0.3 : 0.55;
     var gx, gy, p;
     for (gx = rect.x + 22; gx < rect.x + rect.w; gx += 22) {
       for (gy = rect.y; gy < rect.y + rect.h; gy += 2) {
@@ -468,10 +514,16 @@
     }
     bctx.globalAlpha = 1;
 
-    // pockets
+    // pockets — still legible on glass, but they don't block the view
     for (var i = 0; i < game.world.pockets.length; i++) {
       var pk = game.world.pockets[i];
-      pixCircle(pk.x, pk.y, pk.r, PAL.pocket);
+      if (game.glass) {
+        bctx.globalAlpha = 0.35;
+        pixCircle(pk.x, pk.y, pk.r, PAL.pocket);
+        bctx.globalAlpha = 1;
+      } else {
+        pixCircle(pk.x, pk.y, pk.r, PAL.pocket);
+      }
       pixRing(pk.x, pk.y, pk.r, PAL.pocketRim);
     }
 
@@ -666,7 +718,7 @@
     buttons = [];
     bctx.clearRect(0, 0, BW, BH);
     fill(0, 0, BW, BH, PAL.bg);
-    drawBackdrop(t);
+    drawBackdrop(t, game.glass ? 2.1 : 1);
 
     var inWorld = game.state === "play" || game.state === "shop" ||
                   game.state === "over" || game.state === "win";
