@@ -2,7 +2,9 @@
    App shell is precached so the game runs offline once installed. The Google
    font is cached opportunistically at runtime (it's cross-origin/opaque, so
    it can't be precached reliably — the CSS falls back to monospace anyway). */
-var VERSION = "lcb-v4";
+// Bump on every deploy: the fetch handler is cache-first for scripts, so a
+// stale cache would keep serving the previous build to returning players.
+var VERSION = "lcb-v5";
 var SHELL = [
   "./",
   "./index.html",
