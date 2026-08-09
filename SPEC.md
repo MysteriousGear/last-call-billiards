@@ -57,9 +57,9 @@ game cheating.
 
 | Level | Name | Colors | Warp bumps | Warp scale | Shots | Specials | Extras |
 |---|---|---|---|---|---|---|---|
-| 1 | HAPPY HOUR | 3 | 2 | 0.45 | 10 | 1 (simple) | honest rendering, mild grid warp |
-| 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | grid swims |
-| 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | portal pair, screen wobble, double vision |
+| 1 | HAPPY HOUR | 3 | 2 | 0.45 | 10 | 1 (simple) | no helpers, honest rendering, mild grid warp |
+| 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | 1 helper, grid swims |
+| 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | 2 helpers, portal pair, screen wobble, double vision |
 
 ### Special balls
 
@@ -75,9 +75,99 @@ Random color balls carry a power (pulsing ring + tiny glyph) that triggers
 | PORTAL CORK | spawns a portal pair if none exist |
 
 Simple powers (cash/shot) unlock on level 1; the weird ones join the pool on
-later levels. Planned but not built: the **role-swap ball** (for one turn
-you move the *table* under fixed balls, Baba-Is-You style — pockets sliding
-under balls capture them, and the table keeps its new position).
+later levels. Potting a **portal ball while portals already exist** adds one
+more portal — portals form a cycle (enter *i*, exit *i+1*), so every extra
+portal rewires the whole network. Planned but not built: the **role-swap
+ball** (for one turn you move the *table* under fixed balls, Baba-Is-You
+style — pockets sliding under balls capture them, and the table keeps its
+new position).
+
+### The bartender's mercy
+
+Once per run, the first time the 8-ball drops while colors remain, the
+bartender fishes it out and replaces it near the rack instead of busting
+you. The second time — any level, same run — is a bust. (Scratching on the
+final 8-ball shot is still an immediate bust; mercy covers only the
+too-soon case.)
+
+### Table helpers (random per level)
+
+High warp + a stranded cue ball can be hopeless, so each level rolls
+assists that create playable lines *without* weakening the non-euclidean
+physics itself:
+
+| Helper | Behavior |
+|---|---|
+| **Euclidean patch** | pale dashed rectangle where geometry is flat: balls travel straight until they exit; the grid inside is visibly still |
+| **Bridge** | wooden causeway, euclidean deck, reflecting railings on the long edges. Its axis passes **exactly through a pocket** and stops `BRIDGE_GAP` (24px) short, so riding the corridor leaves you pointed at the hole with one stretch of drunk space still to survive — measured ~62% pot rate over sloppy entries at high warp |
+
+Bridges are **oriented rectangles**, tilted `BRIDGE_TILT` (30°) off the
+rail-parallel heading, in whichever of the two directions swings the mouth
+toward the middle of the table. A corridor lying flat along a rail can only
+be entered from along that rail; angling it opens the mouth to the centre,
+where the cue ball actually lives. The physics works in the corridor's own
+frame (`u` along, `v` across), so railings reflect correctly at any angle,
+and the deck is rasterized per pixel into a cached sprite — canvas rotation
+would antialias the edges and break the pixel look.
+| **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
+| **Bar cat** | at most **once per level**, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, and **taps** a ball toward the nearest pocket, then fades out the same way |
+
+The cat is a nudge, not a cue: a swipe carries the ball only 26–48px to
+improve your position, with a loose ±0.17rad aim. Only when the ball is
+already within `CAT_COMMIT` (52px) of a pocket does it commit — enough
+speed to reach, tight aim — and actually try to sink it.
+
+Zones affect the aim tracer identically to the physics (the preview stays
+honest), and cat/crane pots pay out like any other pot.
+
+### Helper allowance per level
+
+Helpers arrive with the difficulty, so the first table is a pure test of the
+geometry:
+
+| Level | Helpers |
+|---|---|
+| 1 — HAPPY HOUR | **0** — bare table |
+| 2 — DOUBLE SHOT | **1**, rolled at random |
+| 3 — LAST CALL | **2**, rolled at random |
+
+`HELPER_MAX` (2) is the hard ceiling; `HELPER_ALLOWANCE` holds the per-level
+figures and clamps to the ceiling for any level beyond the third.
+
+### Choosing the helpers — TABLE SETUP menu (dev only)
+
+In **dev mode only** (`D`), a HELPERS button appears in the HUD — `M` / `Esc`
+also work — opening **TABLE SETUP**, where the player picks exactly which
+helpers they want from the four, up to `HELPER_MAX`. Outside dev mode the
+button is not drawn and the keys do nothing. As a dev override it may exceed
+the level's natural allowance; the menu shows what the level normally allows
+and flags `(OVERRIDDEN)` when the selection is above it. Notes:
+
+- Changes apply **live** — the table behind the dimmed menu updates on every
+  toggle. Selecting past the cap is refused with a buzz rather than silently
+  dropping an earlier pick.
+- **REROLL SPOTS** re-randomizes where the current selection sits on the
+  felt, without changing which helpers are picked.
+- Once the player edits the set it is **locked** for the rest of the run
+  (`helpersLocked`), so their choice survives level transitions instead of
+  being re-randomized.
+- Per-level "already spent" flags (`craneUsed`, `catDone`) live on the world
+  and survive toggling, so switching a helper off and on again is not a
+  refill.
+
+### Ambience toggles
+
+Two toggles, as HUD corner buttons (mobile) and keys (desktop):
+
+- **GLASS** (`T`): the felt and the wooden rails disappear entirely, leaving
+  a minimal pale chassis (playfield outline + outer frame + corner brackets).
+  The backdrop — stars, nebula, jellyfish, drifting equations — is brightened
+  ~2x and shows straight through the table. Several backdrop actors are
+  positioned to cross the table's own band so there is something to see.
+  Pockets keep their rims, the warp tint and grid stay faint but readable.
+- **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
+  whole world layer. HUD text stays sober.
+- **HELPERS** (`M` / `Esc`): opens the TABLE SETUP menu above. Dev mode only.
 
 ### Ambience
 
@@ -92,8 +182,9 @@ goes soft and sharpens back over ~1.6s (canvas `filter: blur()`, eased out).
 
 | Key | Effect |
 |---|---|
-| **D** | toggle the full-length aim trajectory (1600px trace); "DEV PATH" shows in the HUD |
+| **D** | master dev toggle: full-length aim trajectory (1600px trace), "DEV PATH" in the HUD, and unlocks the two below |
 | **N** | skip the current level — takes the normal clear path, so it pays out and opens the shop |
+| **M** / `Esc` | open the TABLE SETUP helper menu (dev only) |
 
 Remove both before release.
 
