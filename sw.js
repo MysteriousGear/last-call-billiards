@@ -4,14 +4,23 @@
    it can't be precached reliably — the CSS falls back to monospace anyway). */
 // Bump on every deploy: the fetch handler is cache-first for scripts, so a
 // stale cache would keep serving the previous build to returning players.
-var VERSION = "lcb-v6";
+var VERSION = "lcb-v7";
 var SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
+  "./src/config.js",
   "./src/geometry.js",
   "./src/physics.js",
-  "./src/render.js",
+  "./src/audio.js",
+  "./src/table.js",
+  "./src/specials.js",
+  "./src/helpers.js",
+  "./src/shop.js",
+  "./src/render-core.js",
+  "./src/backdrop.js",
+  "./src/render-table.js",
+  "./src/render-ui.js",
   "./src/game.js",
   "./icons/icon-32.png",
   "./icons/icon-192.png",

@@ -9,7 +9,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
   "use strict";
-  var Geo = root.Geo;
+  var LCB = root.LCB = root.LCB || {};
+  var Geo = LCB.Geo;
 
   var FRICTION = 42;        // px/s² constant deceleration
   var STOP = 4;             // below this speed a ball stops
@@ -21,10 +22,6 @@
     return {
       id: id, x: x, y: y, vx: 0, vy: 0, r: r, color: color,
       sunk: false, portalCd: -1,
-      // twinRef, when set, links two balls: every impulse one of them takes
-      // (a clack, a cushion, a railing) is felt by the other, so the pair
-      // travels as one. _ix/_iy accumulate that impulse within a substep.
-      twinRef: null, _ix: 0, _iy: 0,
     };
   }
 
@@ -152,9 +149,7 @@
     var sp = speed(b);
     if (sp === 0) return;
 
-    // geodesic bend (unless standing on euclidean ground), then advance.
-    // The bend is a rotation, not an impulse — twins each get their own,
-    // so a linked pair drifts slightly apart in strongly warped space.
+    // geodesic bend (unless standing on euclidean ground), then advance
     if (!inEuclid(world, b.x, b.y)) {
       var d = Geo.bendDir(world.field, b.x, b.y, b.vx / sp, b.vy / sp, sp * dt);
       b.vx = d.x * sp;
@@ -163,7 +158,6 @@
     b.x += b.vx * dt;
     b.y += b.vy * dt;
 
-    var pvx = b.vx, pvy = b.vy;   // everything below here is impulsive
     zoneWalls(world, b, b.r, CUSHION_E, events, b);
 
     // "rails are one big pocket" mode: touching a cushion pots the ball
@@ -180,8 +174,7 @@
     }
     if (portals(world, b, b.r) >= 0) events.push({ t: "portal", b: b });
 
-    b._ix += b.vx - pvx;
-    b._iy += b.vy - pvy;
+    applyFriction(b, dt);
   }
 
   function applyFriction(b, dt) {
@@ -190,18 +183,6 @@
     var ns = sp - FRICTION * dt;
     if (ns <= STOP * 0.5) { b.vx = 0; b.vy = 0; }
     else { b.vx *= ns / sp; b.vy *= ns / sp; }
-  }
-
-  /** Hand each twin whatever impulse its partner took this substep. */
-  function syncTwins(world) {
-    var i, b;
-    for (i = 0; i < world.balls.length; i++) {
-      b = world.balls[i];
-      var t = b.twinRef;
-      if (!t || b.sunk || t.sunk) continue;
-      b.vx += t._ix;
-      b.vy += t._iy;
-    }
   }
 
   function collidePair(a, b, events) {
@@ -224,8 +205,6 @@
     var j = rel * (1 + BALL_E) / 2;
     a.vx -= j * nx; a.vy -= j * ny;
     b.vx += j * nx; b.vy += j * ny;
-    a._ix -= j * nx; a._iy -= j * ny;   // recorded so twins feel it too
-    b._ix += j * nx; b._iy += j * ny;
     events.push({ t: "clack", speed: rel });
   }
 
@@ -251,19 +230,12 @@
     while (world.acc >= SUB) {
       world.acc -= SUB;
       var i, j;
-      for (i = 0; i < world.balls.length; i++) {
-        world.balls[i]._ix = 0;
-        world.balls[i]._iy = 0;
-      }
       for (i = 0; i < world.balls.length; i++)
         if (!world.balls[i].sunk) stepOne(world, world.balls[i], SUB, events);
       for (i = 0; i < world.balls.length; i++)
         for (j = i + 1; j < world.balls.length; j++)
           if (!world.balls[i].sunk && !world.balls[j].sunk)
             collidePair(world.balls[i], world.balls[j], events);
-      syncTwins(world);
-      for (i = 0; i < world.balls.length; i++)
-        if (!world.balls[i].sunk) applyFriction(world.balls[i], SUB);
       checkPockets(world, events);
     }
     return events;
@@ -328,7 +300,7 @@
     return { pts: pts, hit: hit };
   }
 
-  root.Phys = {
+  LCB.Phys = {
     makeBall: makeBall,
     step: step,
     speed: speed,
