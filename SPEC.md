@@ -31,6 +31,9 @@ game's job is to make them feel like they've had five beers while doing it.
 
 ## 2. Rules (current slice)
 
+- **Aiming is a slingshot**: drag *away* from where you want the ball to go.
+  The cue stick renders behind the ball on the drag side, so your finger and
+  the stick never cover the geodesic you are trying to read.
 - Rack of colored balls + one 8-ball; cue ball on the left.
 - Pot colors in any order → +$ each. Then pot the 8-ball → level clear.
 - Pot the 8-ball while colors remain → **busted** (run over).
@@ -53,6 +56,15 @@ drunkenness you aimed it at, and you get to see the new geometry (and the
 new aim line) before committing to the next one. Anything else reads as the
 game cheating.
 
+**The message always leads the blur.** A chaser earned during a shot is held
+as `pendingChaser` until the table is still *and* whatever it was telling the
+player (a special ball dropping, a scratch) has finished being displayed.
+Only then does the chaser announce itself; the blur starts `CHASER_LEAD`
+(0.75s) after that message appears. Blurring over an unread message just
+reads as a glitch. **Shooting is locked** for the whole sequence
+(`busyUntil`), so a shot can never be fired into a screen the player cannot
+see.
+
 ### The run (vertical slice)
 
 | Level | Name | Colors | Warp bumps | Warp scale | Shots | Specials | Extras |
@@ -60,6 +72,19 @@ game cheating.
 | 1 | HAPPY HOUR | 3 | 2 | 0.45 | 10 | 1 (simple) | no helpers, honest rendering, mild grid warp |
 | 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | 1 helper, grid swims |
 | 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | 2 helpers, portal pair, screen wobble, double vision |
+
+### Twin balls
+
+From level 2, one pair of colored balls is **bound together**: each carries a
+`2` and a ring in the level's binding colour (`TWIN_COLORS`, rotating per
+level), joined by a marching dashed tether.
+
+Mechanically, every *impulse* one twin takes — a clack, a cushion, a bridge
+railing — is handed to the other in the same substep, so the pair travels as
+one. Geodesic bending is deliberately **not** shared: it is a rotation rather
+than an impulse, and each twin gets its own, so a bound pair slowly fans
+apart in strongly warped space. Potting is independent: sinking one leaves
+the other on the table, still linked to nothing.
 
 ### Special balls
 
@@ -111,6 +136,7 @@ and the deck is rasterized per pixel into a cached sprite — canvas rotation
 would antialias the edges and break the pixel look.
 | **Crane dock** | brass target ring; roll any ball onto it and a claw lifts it straight to the nearest pocket. One use per level. Won't take the cue ball, won't touch the 8-ball while colors remain |
 | **Bar cat** | at most **once per level**, while the table is at rest, a tabby pads in (fading and walking in over 0.4s), winds up, and **taps** a ball toward the nearest pocket, then fades out the same way |
+| **Yin-yang** | once per level, while the table is at rest, the **cue ball and the 8-ball trade places**. They turn a half-circle about their shared midpoint over 1.7s while halo rings sweep out and a yin-yang symbol rises and fades above them — the swap has to be *seen* to be understood. Aiming is locked for the duration |
 
 The cat is a nudge, not a cue: a swipe carries the ball only 26–48px to
 improve your position, with a loose ±0.17rad aim. Only when the ball is
@@ -168,6 +194,9 @@ Two toggles, as HUD corner buttons (mobile) and keys (desktop):
 - **TRIP** (`C`): a slow global hue drift (≈40s per full cycle) over the
   whole world layer. HUD text stays sober.
 - **HELPERS** (`M` / `Esc`): opens the TABLE SETUP menu above. Dev mode only.
+- **RESTART**: abandons the run and starts a new one. Two taps — the first
+  arms it and it reads `SURE?` for 2.5s — because losing a run to a stray
+  thumb on a phone would be miserable.
 
 ### Ambience
 
@@ -183,8 +212,12 @@ goes soft and sharpens back over ~1.6s (canvas `filter: blur()`, eased out).
 | Key | Effect |
 |---|---|
 | **D** | master dev toggle: full-length aim trajectory (1600px trace), "DEV PATH" in the HUD, and unlocks the two below |
-| **N** | skip the current level — takes the normal clear path, so it pays out and opens the shop |
-| **M** / `Esc` | open the TABLE SETUP helper menu (dev only) |
+| **N** | skip the current level — dead unless dev mode is on |
+| **M** / `Esc` | open the TABLE SETUP helper menu — dead unless dev mode is on |
+
+On a phone there is no keyboard, so dev mode is reached by **tapping the
+level label (top-left) five times** within three seconds; a countdown hint
+appears from the third tap.
 
 Remove both before release.
 

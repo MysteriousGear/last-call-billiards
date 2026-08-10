@@ -12,7 +12,8 @@ drunk people. This one makes the *geometry* drunk too.
 Pot the colored balls in any order, then the 8-ball. Sink the 8 too early, or
 scratch on it, and the night is over.
 
-- **Drag from the cue ball** to aim — direction and power. Release to shoot.
+- **Pull back from the cue ball** and let go, like a real cue: the ball goes
+  the *opposite* way to your drag, so your finger never covers the line.
 - The dashed line is the **true** path your shot will take, curves and
   cushion bounces included. It's honest — it's just *short*. Upgrade it.
 - Every **4 shots you down a chaser**: the room goes soft for a moment and
@@ -24,6 +25,10 @@ scratch on it, and the night is over.
 - Some balls carry **powers** that fire when potted — cash, an extra shot, a
   new mid-table pocket, portals, or two shots where *every cushion is a
   pocket* (the cue ball included — good luck).
+- From level 2, a pair of balls is **bound together** (marked `2`, joined by
+  a tether): hit one and its twin moves with it.
+- Helpers appear on later tables — flat patches, angled bridges, a crane, a
+  bar cat, and a yin-yang that swaps the cue ball with the 8-ball.
 
 Three levels: **HAPPY HOUR → DOUBLE SHOT → LAST CALL**. Clear all three and
 you've closed the bar.
@@ -38,8 +43,11 @@ table is 16:9.
 
 | Key | Effect |
 |---|---|
-| `D` | show the full-length aim trajectory |
+| `D` | toggle dev mode (full-length aim trajectory, unlocks the rest) |
 | `N` | skip the current level (pays out, opens the shop) |
+| `M` / `Esc` | TABLE SETUP — choose which helpers sit on the felt |
+
+On a phone: tap the level label (top-left) five times to toggle dev mode.
 
 ## Running it locally
 

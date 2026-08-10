@@ -190,6 +190,9 @@
     text(label, x + w / 2, y + (h - (size || 7)) / 2 + 1, size || 7, hot ? PAL.accent : PAL.text, "center");
   }
 
+  /** An invisible tap target (used for the hidden dev-mode gesture). */
+  function hotspot(id, x, y, w, h) { buttons.push({ id: id, x: x, y: y, w: w, h: h }); }
+
   function hitButton(p) {
     for (var i = 0; i < buttons.length; i++) {
       var b = buttons[i];
@@ -398,6 +401,71 @@
     }
   }
 
+  /** The tether between bound balls, so the link is never a surprise. */
+  function drawTwinLinks(game, t) {
+    var bs = game.world.balls, seen = [];
+    for (var i = 0; i < bs.length; i++) {
+      var a = bs[i], b = a.twinRef;
+      if (!b || a.sunk || b.sunk || seen.indexOf(b) >= 0) continue;
+      seen.push(a);
+      var d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d < 1) continue;
+      bctx.fillStyle = a.twinColor || "#37b6ff";
+      for (var s = a.r + 2; s < d - a.r - 1; s += 1) {
+        if (((s + t * 14) | 0) % 5 > 1) continue;    // marching dashes
+        bctx.globalAlpha = 0.6;
+        bctx.fillRect((a.x + (b.x - a.x) * (s / d)) | 0,
+                      (a.y + (b.y - a.y) * (s / d)) | 0, 1, 1);
+      }
+      bctx.globalAlpha = 1;
+    }
+  }
+
+  /**
+   * Yin-yang swap: the two balls turn a half-circle about their midpoint
+   * while the symbol rises over them. Ball positions are only committed at
+   * the end, so this draws them itself.
+   */
+  function drawYin(game, t) {
+    var y = game.yin;
+    if (!y) return;
+    var p = Math.min(1, (t - y.t0) / y.dur);
+    var e = p * p * (3 - 2 * p);                   // smoothstep
+    var mx = (y.a.x + y.b.x) / 2, my = (y.a.y + y.b.y) / 2;
+    var ang = Math.PI * e;
+    var ca = Math.cos(ang), sa = Math.sin(ang);
+
+    [y.a, y.b].forEach(function (ball) {
+      var dx = ball.x - mx, dy = ball.y - my;
+      drawBall({ x: mx + dx * ca - dy * sa, y: my + dx * sa + dy * ca,
+                 r: ball.r, color: ball.color, sunk: false }, t);
+    });
+
+    // halo rings sweeping out from the midpoint
+    bctx.globalAlpha = 0.5 * (1 - p);
+    pixRing(mx, my, 8 + e * 26, "#f2ede4", t * 2);
+    pixRing(mx, my, 4 + e * 18, "#23232c", -t * 2);
+    bctx.globalAlpha = 1;
+
+    // the symbol itself, rising and fading
+    var gy = my - 10 - e * 22, R = 7;
+    bctx.globalAlpha = Math.min(1, (1 - p) * 1.6);
+    for (var oy = -R; oy <= R; oy++) {
+      for (var ox = -R; ox <= R; ox++) {
+        if (ox * ox + oy * oy > R * R) continue;
+        var col;
+        if (Math.hypot(ox, oy + R / 2) <= R / 2) col = "#23232c";
+        else if (Math.hypot(ox, oy - R / 2) <= R / 2) col = "#f2ede4";
+        else col = oy < 0 ? "#f2ede4" : "#23232c";
+        bctx.fillStyle = col;
+        bctx.fillRect(Math.round(mx + ox), Math.round(gy + oy), 1, 1);
+      }
+    }
+    fill(mx, gy - R / 2, 1, 1, "#f2ede4");         // the two eyes
+    fill(mx, gy + R / 2, 1, 1, "#23232c");
+    bctx.globalAlpha = 1;
+  }
+
   function drawCat(game, t) {
     var cat = game.cat;
     if (!cat) return;
@@ -578,6 +646,18 @@
       fill(x - 1, y - 1, 3, 3, "#f2ede4");
       fill(x, y, 1, 1, "#23232c");
     }
+    if (b.twinColor) {
+      // bound pair: a ring in the binding colour and a 2 stamped on the ball
+      bctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 3.5);
+      pixRing(x, y, r + 2, b.twinColor);
+      bctx.globalAlpha = 1;
+      var dark = b.color === "cue" ? "#4a4a5c" : "#ffffff";
+      fill(x - 1, y - 2, 3, 1, dark);   // ┌─┐
+      fill(x + 1, y - 1, 1, 1, dark);   //   │
+      fill(x - 1, y, 3, 1, dark);       // ┌─┘
+      fill(x - 1, y + 1, 1, 1, dark);   // │
+      fill(x - 1, y + 2, 3, 1, dark);   // └─┘
+    }
     if (b.special) {
       var tint = SPECIAL_TINT[b.special] || "#ffffff";
       bctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 5);
@@ -602,6 +682,20 @@
     var aim = game.aim;
     if (!aim || !aim.active || !aim.trace) return;
     var pts = aim.trace.pts;
+    var cue = game.cue();
+
+    // The cue stick sits behind the ball, on the side you are dragging
+    // toward. The shot goes the other way, so the line you are reading is
+    // never under your own finger.
+    if (aim.pull && cue) {
+      var back = cue.r + 3 + aim.power * 16;
+      for (var s = back; s < back + 32; s++) {
+        var wx = cue.x + aim.pull.x * s, wy = cue.y + aim.pull.y * s;
+        bctx.fillStyle = s < back + 4 ? "#e8e0cf" : (s < back + 10 ? "#8a5530" : "#6b3f23");
+        bctx.fillRect(wx | 0, wy | 0, 1, 1);
+        bctx.fillRect((wx - aim.pull.y) | 0, (wy + aim.pull.x) | 0, 1, 1);
+      }
+    }
 
     // dashed geodesic: the truth, but only as far as your eyes can afford
     for (var i = 0; i < pts.length; i++) {
@@ -629,10 +723,15 @@
     var run = game.run, lv = game.level;
 
     // toggles along the bottom edge, clear of the power bar
+    var armed = t < game.restartArm + 2.5;
     button("glass", 4, 212, 46, 11, "GLASS", game.glass || game.hover === "glass", 5);
+    button("restart", 54, 212, 52, 11, armed ? "SURE?" : "RESTART",
+      armed || game.hover === "restart", 5);
     button("trip", BW - 50, 212, 46, 11, "TRIP", game.trip || game.hover === "trip", 5);
     // helper picking is a dev tool, so it only shows up in dev mode
     if (game.dev) button("setup", BW - 106, 212, 52, 11, "HELPERS", game.hover === "setup", 5);
+    // hidden five-tap on the level label: the only way into dev mode on a phone
+    hotspot("devtap", 14, 4, 58, 17);
 
     text("LVL " + (run.levelIndex + 1) + "/3", 18, 8, 7, PAL.dim);
     text(lv.name, 74, 8, 7, PAL.accent);
@@ -685,7 +784,7 @@
     text("pot the colors, then the 8-ball", BW / 2, 122, 6, PAL.dim, "center");
     text("straight lines not included", BW / 2, 132, 6, PAL.dim, "center");
     button("start", BW / 2 - 60, 156, 120, 20, "RACK UP", game.hover === "start");
-    text("drag from the cue ball to shoot", BW / 2, 196, 5, PAL.dim, "center");
+    text("pull back from the cue ball and let go", BW / 2, 196, 5, PAL.dim, "center");
   }
 
   function drawShop(game) {
@@ -722,39 +821,38 @@
     var allow = api ? api.helperAllowance(game.run.levelIndex) : max;
     var chosen = game.run.helpers || [];
 
-    text("TABLE SETUP", BW / 2, 12, 11, PAL.accent, "center");
-    text("dev tool", BW / 2, 200, 5, PAL.danger, "center");
-    text("what's on the felt  ·  " + chosen.length + "/" + max + " picked",
-      BW / 2, 30, 6, chosen.length >= max ? PAL.accent : PAL.dim, "center");
-    text("level " + (game.run.levelIndex + 1) + " normally allows " + allow +
+    text("TABLE SETUP", BW / 2, 10, 10, PAL.accent, "center");
+    text("dev tool  ·  " + chosen.length + "/" + max + " picked  ·  level " +
+         (game.run.levelIndex + 1) + " normally allows " + allow +
          (chosen.length > allow ? "  (OVERRIDDEN)" : ""),
-      BW / 2, 191, 5, chosen.length > allow ? PAL.danger : PAL.dim, "center");
+      BW / 2, 28, 5, chosen.length > allow ? PAL.danger : PAL.dim, "center");
 
+    // one full-width row per helper — the list grows, so keep it in a column
+    var X = 24, W = BW - 48, ROW = 24, PITCH = 27, TOP = 42;
     for (var i = 0; i < list.length; i++) {
       var h = list[i];
       var on = chosen.indexOf(h.key) >= 0;
-      var x = 24 + (i % 2) * 180, y = 46 + Math.floor(i / 2) * 52;
+      var y = TOP + i * PITCH;
       var hot = game.hover === "help" + i;
-      fill(x, y, 172, 46, on ? PAL.cardHi : PAL.card);
-      fill(x, y, 172, 1, on ? PAL.ok : PAL.railLight);
-      fill(x, y + 45, 172, 1, PAL.railDark);
-      fill(x, y, 1, 46, on ? PAL.ok : PAL.railLight);
-      fill(x + 171, y, 1, 46, PAL.railDark);
-      buttons.push({ id: "help" + i, x: x, y: y, w: 172, h: 46 });
+      fill(X, y, W, ROW, on ? PAL.cardHi : PAL.card);
+      fill(X, y, W, 1, on ? PAL.ok : PAL.railLight);
+      fill(X, y + ROW - 1, W, 1, PAL.railDark);
+      fill(X, y, 1, ROW, on ? PAL.ok : PAL.railLight);
+      fill(X + W - 1, y, 1, ROW, PAL.railDark);
+      buttons.push({ id: "help" + i, x: X, y: y, w: W, h: ROW });
 
       // checkbox
-      fill(x + 7, y + 7, 9, 9, "#0b0f14");
-      pixRing(x + 11, y + 11, 4, on ? PAL.ok : PAL.dim);
-      if (on) { fill(x + 10, y + 12, 2, 2, PAL.ok); fill(x + 12, y + 9, 2, 3, PAL.ok); }
+      fill(X + 7, y + 7, 10, 10, "#0b0f14");
+      pixRing(X + 12, y + 12, 4, on ? PAL.ok : PAL.dim);
+      if (on) { fill(X + 11, y + 13, 2, 2, PAL.ok); fill(X + 13, y + 10, 2, 3, PAL.ok); }
 
-      text(h.name, x + 22, y + 7, 6, on ? PAL.ok : (hot ? PAL.accent : PAL.text));
-      text(h.blurb, x + 22, y + 21, 5, PAL.dim);
-      text(h.blurb2, x + 22, y + 30, 5, PAL.dim);
+      text(h.name, X + 24, y + 9, 6, on ? PAL.ok : (hot ? PAL.accent : PAL.text));
+      text(h.desc, X + 122, y + 10, 5, PAL.dim);
     }
 
-    button("setupRoll", 24, 154, 100, 16, "REROLL SPOTS", game.hover === "setupRoll", 6);
-    button("setupDone", BW - 124, 154, 100, 16, "BACK TO PLAY", game.hover === "setupDone", 6);
-    text("changes apply immediately  ·  M or ESC to close", BW / 2, 182, 5, PAL.dim, "center");
+    button("setupRoll", 24, 188, 100, 15, "REROLL SPOTS", game.hover === "setupRoll", 5);
+    button("setupDone", BW - 124, 188, 100, 15, "BACK TO PLAY", game.hover === "setupDone", 5);
+    text("changes apply immediately  ·  M or ESC to close", BW / 2, 209, 5, PAL.dim, "center");
   }
 
   function drawEnd(game, t) {
@@ -792,7 +890,14 @@
                   game.state === "over" || game.state === "win";
     if (inWorld) {
       drawTable(game, t);
-      for (var i = 0; i < game.world.balls.length; i++) drawBall(game.world.balls[i], t);
+      drawTwinLinks(game, t);
+      for (var i = 0; i < game.world.balls.length; i++) {
+        var bb = game.world.balls[i];
+        // the yin-yang animation draws its own two balls, mid-swap
+        if (game.yin && (bb === game.yin.a || bb === game.yin.b)) continue;
+        drawBall(bb, t);
+      }
+      drawYin(game, t);
       drawCat(game, t);
       drawGoblin(game, t);
       if (game.state === "play") { drawAim(game, t); drawHud(game, t); drawBanner(game, t); }
@@ -829,11 +934,11 @@
     flushText(game, t); // sober layer: text never wobbles
   }
 
-  var DEFOCUS_TIME = 1.6;
-  /** Blur radius in device px for the chaser defocus, 0 when it's over. */
+  /** Blur radius in device px for the chaser defocus, 0 when it's over.
+      defocusT may sit in the future — the message gets a head start. */
   function defocusPx(game, t) {
     if (!game.defocusT) return 0;
-    var p = (t - game.defocusT) / DEFOCUS_TIME;
+    var p = (t - game.defocusT) / (game.defocusDur || 1.6);
     if (p < 0 || p >= 1) return 0;
     // ease out: softest right after the gulp, sharpening back to normal.
     // canvas filters work in backing-store pixels, hence the dpr.

@@ -18,6 +18,8 @@
   // physics and visuals together. So the first shots teach the table
   // honestly and the geometry closes in as the night goes on.
   var CHASER_EVERY = 4, DRUNK_BASE = 0.1, DRUNK_STEP = 0.35, DRUNK_MAX = 1.3;
+  // the chaser message leads, the blur follows, and neither may be shot through
+  var CHASER_LEAD = 0.75, DEFOCUS_TIME = 1.6;
 
   // Cat: a nudge, not a shot. Only goes for the pot from inside CAT_COMMIT px.
   var CAT_NUDGE = 26, CAT_NUDGE_VAR = 22, CAT_COMMIT = 52;
@@ -26,6 +28,7 @@
   // the table, and stop short of the pocket so the last stretch still counts.
   var BRIDGE_TILT = Math.PI / 6;   // 30°
   var BRIDGE_GAP = 24;
+  var RESTART_WINDOW = 2.5;        // seconds to confirm a restart
 
   // Helpers arrive with the difficulty: none on the first table, one on the
   // second, two on the third. HELPER_MAX is the hard ceiling (and what the
@@ -36,11 +39,16 @@
     return HELPER_ALLOWANCE[Math.min(idx, HELPER_ALLOWANCE.length - 1)];
   }
   var HELPERS = [
-    { key: "euclid", name: "FLAT PATCH", blurb: "a calm island where", blurb2: "geometry behaves" },
-    { key: "bridge", name: "BRIDGE",     blurb: "railed corridor aimed", blurb2: "at a pocket" },
-    { key: "crane",  name: "CRANE",      blurb: "dock a ball, the claw", blurb2: "drops it in. once" },
-    { key: "cat",    name: "BAR CAT",    blurb: "nudges one ball into", blurb2: "a better spot. once" },
+    { key: "euclid", name: "FLAT PATCH", desc: "flat ground, shots run straight" },
+    { key: "bridge", name: "BRIDGE",     desc: "railed corridor aimed at a pocket" },
+    { key: "crane",  name: "CRANE",      desc: "dock a ball, the claw drops it in" },
+    { key: "cat",    name: "BAR CAT",    desc: "nudges one ball to a better spot" },
+    { key: "yin",    name: "YIN-YANG",   desc: "swaps the cue and the 8-ball" },
   ];
+
+  // Twin balls: two colors bound together, marked with a 2. The binding
+  // colour changes from level to level so it reads as a fresh pairing.
+  var TWIN_COLORS = ["#37b6ff", "#ff8a2a", "#c05fd6"];
 
   var SPECIALS = {
     cash:       { msg: "tip jar ball! +$25" },
@@ -59,12 +67,15 @@
   var LEVELS = [
     { name: "HAPPY HOUR", tag: "two drinks in — space leans a little",
       colors: 3, bumps: 2, warp: 0.45, shots: 10, portals: false, specials: 1,
+      twins: false,
       visuals: { gridWarp: 0.35, swim: 0, wobble: 0, ghost: 0 } },
     { name: "DOUBLE SHOT", tag: "the felt has started to breathe",
       colors: 5, bumps: 3, warp: 0.7, shots: 12, portals: false, specials: 2,
+      twins: true,
       visuals: { gridWarp: 0.7, swim: 1.2, wobble: 0, ghost: 0 } },
     { name: "LAST CALL", tag: "there are two of every table",
       colors: 6, bumps: 4, warp: 0.95, shots: 14, portals: true, specials: 2,
+      twins: true,
       visuals: { gridWarp: 1.0, swim: 2.0, wobble: 2.4, ghost: 1 } },
   ];
 
@@ -122,6 +133,7 @@
     mercy:   function () { beep(360, 0.12, 0.14, "triangle", 160); setTimeout(function () { beep(560, 0.18, 0.14, "triangle", 120); }, 130); },
     crane:   function () { beep(70, 0.3, 0.16, "square", 40); setTimeout(function () { beep(110, 0.5, 0.1, "sawtooth", 90); }, 250); },
     meow:    function () { beep(760, 0.16, 0.12, "triangle", -260); setTimeout(function () { beep(680, 0.2, 0.1, "triangle", -300); }, 200); },
+    yin:     function () { [392, 523, 659, 523, 392].forEach(function (f, i) { setTimeout(function () { beep(f, 0.22, 0.10, "sine"); }, i * 170); }); },
     buy:     function () { beep(520, 0.09, 0.14, "square"); setTimeout(function () { beep(780, 0.12, 0.14, "square"); }, 80); },
     nope:    function () { beep(120, 0.15, 0.14, "sawtooth", -40); },
     lose:    function () { beep(220, 0.4, 0.16, "sawtooth", -160); },
@@ -138,7 +150,9 @@
     msg: "", msgUntil: 0, msgColor: null,
     levelStartT: 0, endReason: "",
     chasers: 0, vis: null, dev: false, goblin: null, defocusT: 0,
-    craneAnim: null, cat: null, glass: false, trip: false,
+    defocusDur: DEFOCUS_TIME, pendingChaser: false, busyUntil: 0,
+    craneAnim: null, cat: null, yin: null, glass: false, trip: false,
+    restartArm: 0,
     cue: function () {
       for (var i = 0; i < game.world.balls.length; i++)
         if (game.world.balls[i].color === "cue") return game.world.balls[i];
@@ -203,9 +217,12 @@
       catAllowed: false,
       catDone: false,
       craneUsed: false,
+      yinAllowed: false,
+      yinDone: false,
     };
     game.craneAnim = null;
     game.cat = null;
+    game.yin = null;
 
     // rack: triangle on the right, 8-ball tucked in the middle of it
     var colors = COLOR_POOL.slice(0, def.colors);
@@ -234,6 +251,20 @@
       var bi = Math.floor(Math.random() * candidates.length);
       var si = Math.floor(Math.random() * tier.length);
       candidates.splice(bi, 1)[0].special = tier.splice(si, 1)[0];
+    }
+
+    // bind one pair of colors together
+    if (def.twins) {
+      var pool = world.balls.filter(function (b) {
+        return b.color !== "cue" && b.color !== "eight";
+      });
+      if (pool.length >= 2) {
+        var p1 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+        var p2 = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+        var tint = TWIN_COLORS[idx % TWIN_COLORS.length];
+        p1.twinRef = p2; p2.twinRef = p1;
+        p1.twinColor = tint; p2.twinColor = tint;
+      }
     }
 
     // Helpers last: they need the final ball positions to route around.
@@ -289,6 +320,7 @@
       r: 7, used: world.craneUsed,
     } : null;
     world.catAllowed = keys.indexOf("cat") >= 0;
+    world.yinAllowed = keys.indexOf("yin") >= 0;
   }
 
   /**
@@ -613,7 +645,8 @@
 
   function canAim() {
     return game.state === "play" && !Phys.anyMoving(game.world) &&
-           !game.cue().sunk && !game.craneAnim && !game.cat;
+           !game.cue().sunk && !game.craneAnim && !game.cat && !game.yin &&
+           !chaserBusy();
   }
 
   function updateAim(p) {
@@ -621,7 +654,10 @@
     var dx = p.x - c.x, dy = p.y - c.y;
     var d = Math.hypot(dx, dy);
     if (d < 6) { game.aim.dir = null; game.aim.trace = null; game.aim.power = 0; return; }
-    game.aim.dir = { x: dx / d, y: dy / d };
+    // Pull back to shoot forward, like a real cue: dragging away from the
+    // target keeps the finger (and the cue stick) off the line you're reading.
+    game.aim.dir = { x: -dx / d, y: -dy / d };
+    game.aim.pull = { x: dx / d, y: dy / d };
     game.aim.power = Math.min(1, Math.max(0, (d - 12) / 130));
     var reach = game.dev ? 1600 : game.run.aimLen; // dev mode: the whole truth
     game.aim.trace = Phys.tracePath(game.world, c.x, c.y,
@@ -649,9 +685,30 @@
     var c = Math.floor(game.run.shotsFired / CHASER_EVERY);
     if (c <= game.chasers || drunkF() >= DRUNK_MAX) return;
     game.chasers = c;
-    game.defocusT = tNow;   // the room goes soft for a second or two
+    game.pendingChaser = true;   // fires once the table has finished talking
+  }
+
+  /**
+   * Hold the chaser until whatever the table was telling the player (a
+   * special ball dropping, a scratch) has had its say. Blurring on top of a
+   * message the player hasn't read yet just looks like a glitch. Once it
+   * fires, the message leads and the blur follows CHASER_LEAD later.
+   */
+  function maybeFireChaser() {
+    if (!game.pendingChaser) return;
+    if (Phys.anyMoving(game.world) || game.craneAnim || game.cat || game.yin) return;
+    if (performance.now() < game.msgUntil) return;
+
+    game.pendingChaser = false;
     SFX.chaser();
-    say("CHASER DOWNED (hic) — space tilts", Render.PAL.accent, 3200);
+    say("CHASER DOWNED (hic) — space tilts", Render.PAL.accent, 3400);
+    game.defocusT = tNow + CHASER_LEAD;
+    game.busyUntil = tNow + CHASER_LEAD + DEFOCUS_TIME;
+  }
+
+  /** True while the room is mid-chaser: read the message, then it blurs. */
+  function chaserBusy() {
+    return game.pendingChaser || tNow < game.busyUntil;
   }
 
   function onDown(e) {
@@ -696,6 +753,8 @@
     else if (id && id.indexOf("item") === 0 && game.state === "shop") buyItem(+id.slice(4));
     else if (id === "glass") toggleGlass();
     else if (id === "trip") toggleTrip();
+    else if (id === "restart") armRestart();
+    else if (id === "devtap") devTap();
     else if (id === "setup") openSetup();
     else if (id === "setupDone") closeSetup();
     else if (id === "setupRoll") {   // same helpers, new places on the felt
@@ -725,6 +784,36 @@
     game.run.helpersLocked = true;
     applyHelpers(game.world, set);
     SFX.buy();
+  }
+
+  /** Restart needs two taps — losing a run to a stray thumb would be rotten. */
+  function armRestart() {
+    if (tNow < game.restartArm + RESTART_WINDOW) {
+      game.restartArm = 0;
+      SFX.buy();
+      newRun();
+      return;
+    }
+    game.restartArm = tNow;
+    SFX.nope();
+    say("tap again to restart the night", Render.PAL.danger, RESTART_WINDOW * 1000);
+  }
+
+  function toggleDev() {
+    game.dev = !game.dev;
+    if (!game.dev && game.state === "setup") closeSetup();
+    say(game.dev ? "dev mode: ON (D path, N skip, M helpers)"
+                 : "dev mode: off", Render.PAL.danger, 1900);
+  }
+
+  /** Phones have no keyboard, so five taps on the level label do it. */
+  var devTaps = 0, devTapT = 0;
+  function devTap() {
+    if (tNow - devTapT > 3) devTaps = 0;
+    devTapT = tNow;
+    devTaps++;
+    if (devTaps >= 5) { devTaps = 0; toggleDev(); }
+    else if (devTaps >= 3) say((5 - devTaps) + " more...", Render.PAL.dim, 1400);
   }
 
   function toggleGlass() {
@@ -843,6 +932,41 @@
     };
   }
 
+  /**
+   * Yin-yang: once per level, cue and 8-ball trade places. They rotate a
+   * half-turn about their shared midpoint while a yin-yang rises over them,
+   * because the swap needs to be *seen* to be understood.
+   */
+  function updateYin(dt) {
+    var y = game.yin;
+    if (y) {
+      if (tNow - y.t0 >= y.dur) {
+        var ax = y.a.x, ay = y.a.y;
+        y.a.x = y.b.x; y.a.y = y.b.y;
+        y.b.x = ax;    y.b.y = ay;
+        y.a.vx = y.a.vy = y.b.vx = y.b.vy = 0;
+        y.a.portalCd = y.b.portalCd = -1;
+        game.yin = null;
+        say("cue and 8 have traded places", Render.PAL.accent, 3000);
+      }
+      return;
+    }
+    if (game.world.yinDone || !game.world.yinAllowed) return;
+    if (shot !== null || game.craneAnim || game.cat) return;
+    if (Phys.anyMoving(game.world)) return;
+    if (Math.random() > dt / 30) return;
+
+    var cue = game.cue(), eight = null;
+    for (var i = 0; i < game.world.balls.length; i++)
+      if (game.world.balls[i].color === "eight") eight = game.world.balls[i];
+    if (!cue || !eight || cue.sunk || eight.sunk) return;
+
+    game.world.yinDone = true;
+    game.yin = { a: cue, b: eight, t0: tNow, dur: 1.7 };
+    SFX.yin();
+    say("YIN AND YANG", Render.PAL.text, 2000);
+  }
+
   /* ── main loop ───────────────────────────────────────────────────────── */
 
   var lastMs = performance.now();
@@ -865,9 +989,11 @@
       if (evts.length) onEvents(evts);
       updateCrane();
       updateCat(dt);
-      // the crane and the cat both count as "the table is busy":
-      // a shot doesn't settle until every helper has finished meddling
-      var moving = Phys.anyMoving(game.world) || !!game.craneAnim ||
+      updateYin(dt);
+      maybeFireChaser();
+      // every helper counts as "the table is busy": a shot doesn't settle
+      // until the crane, the cat and the yin-yang have finished meddling
+      var moving = Phys.anyMoving(game.world) || !!game.craneAnim || !!game.yin ||
                    !!(game.cat && game.cat.armed);
       if (wasMoving && !moving) settleShot();
       wasMoving = moving;
@@ -908,21 +1034,17 @@
     // dev helpers (temporary): D = full-trajectory aim line, N = skip level
     root.addEventListener("keydown", function (e) {
       var k = e.key.toLowerCase();
-      if (k === "d") {
-        game.dev = !game.dev;
-        if (!game.dev && game.state === "setup") closeSetup();
-        say(game.dev ? "dev mode: ON (D path, N skip, M helpers)"
-                     : "dev mode: off", Render.PAL.danger, 1900);
-      } else if (k === "n" && game.state === "play") {
+      if (k === "d") { audio(); toggleDev(); }
+      // level skip and the helper menu are dev tools: dead keys without it
+      else if (k === "n" && game.dev && game.state === "play") {
         audio();
         shot = null;
         say("dev skip", Render.PAL.danger, 1200);
         clearLevel();       // same path as a real clear: pays out, opens the shop
+      } else if ((k === "m" || k === "escape") && game.dev) {
+        if (game.state === "setup") closeSetup(); else openSetup();
       } else if (k === "t") toggleGlass();
       else if (k === "c") toggleTrip();
-      else if (k === "m" || k === "escape") {
-        if (game.state === "setup") closeSetup(); else openSetup();
-      }
     });
     game.run = { money: 0, levelIndex: 0, shots: 0, shotsFired: 0, items: {},
                  aimLen: 110, pocketBonus: 0, soberSips: 0, shotBonus: 0,
