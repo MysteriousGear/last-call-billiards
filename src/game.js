@@ -66,11 +66,11 @@
 
   var LEVELS = [
     { name: "HAPPY HOUR", tag: "two drinks in — space leans a little",
-      colors: 3, bumps: 2, warp: 0.45, shots: 10, portals: false, specials: 1,
+      colors: 3, bumps: 2, warp: 0.45, shots: 20, portals: false, specials: 1,
       twins: false,
       visuals: { gridWarp: 0.35, swim: 0, wobble: 0, ghost: 0 } },
     { name: "DOUBLE SHOT", tag: "the felt has started to breathe",
-      colors: 5, bumps: 3, warp: 0.7, shots: 12, portals: false, specials: 2,
+      colors: 5, bumps: 3, warp: 0.7, shots: 16, portals: false, specials: 2,
       twins: true,
       visuals: { gridWarp: 0.7, swim: 1.2, wobble: 0, ghost: 0 } },
     { name: "LAST CALL", tag: "there are two of every table",
