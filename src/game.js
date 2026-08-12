@@ -25,7 +25,6 @@
   var RECT = Cfg.RECT, PAL = Cfg.PAL;
 
   /* ── state ───────────────────────────────────────────────────────────── */
-
   var game = {
     state: "title",                  // title | play | shop | setup | over | win
     world: null, level: Cfg.LEVELS[0], run: null,
