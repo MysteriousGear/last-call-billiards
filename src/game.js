@@ -52,7 +52,7 @@
   function freshRun() {
     return {
       money: 0, levelIndex: 0, shots: 0, shotsFired: 0,
-      items: {}, aimLen: Cfg.AIM_LEN, pocketBonus: 0, soberSips: 0,
+      items: { bounceReader: 1 }, aimLen: Cfg.AIM_LEN, pocketBonus: 0, soberSips: 0,
       shotBonus: 0, potBonus: 0, mercyUsed: false,
       helpers: Helpers.randomSet(Cfg.helperAllowance(0)), helpersLocked: false,
     };
