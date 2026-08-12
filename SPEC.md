@@ -73,18 +73,20 @@ see.
 | 2 | DOUBLE SHOT | 5 | 3 | 0.70 | 12 | 2 | 1 helper, grid swims |
 | 3 | LAST CALL | 6 | 4 | 0.95 | 14 | 2 (any) | 2 helpers, portal pair, screen wobble, double vision |
 
-### Twin balls
+### Twin balls — removed, and why
 
-From level 2, one pair of colored balls is **bound together**: each carries a
-`2` and a ring in the level's binding colour (`TWIN_COLORS`, rotating per
-level), joined by a marching dashed tether.
+Bound pairs (two balls sharing every impulse) shipped in v6 and were pulled
+in v7. The implementation had a **table-locking bug**: when two twins collided
+*with each other*, `collidePair` gave them equal-and-opposite impulses and the
+twin sync then handed each the other's, exactly cancelling the separation.
+The pair froze in contact with velocities pointed into each other, unable to
+push apart, and the shot never settled — the player was stuck until friction
+alone drained them.
 
-Mechanically, every *impulse* one twin takes — a clack, a cushion, a bridge
-railing — is handed to the other in the same substep, so the pair travels as
-one. Geodesic bending is deliberately **not** shared: it is a rotation rather
-than an impulse, and each twin gets its own, so a bound pair slowly fans
-apart in strongly warped space. Potting is independent: sinking one leaves
-the other on the table, still linked to nothing.
+Any future implementation has to special-case a collision **between** linked
+balls (resolve it normally and skip the impulse sharing for that pair), or
+model the pair as one rigid body with a single velocity instead of sharing
+impulses.
 
 ### Special balls
 
@@ -292,17 +294,46 @@ Space over the felt carries a conformal metric
 ## 5. Files
 
 ```
-index.html          boot + canvas + font + PWA wiring + portrait hint
-manifest.webmanifest PWA manifest
-sw.js               service worker (offline app shell)
-icons/              generated PNG icons (32/192/512)
-tools/mkicons.js    regenerates the icons (pure Node)
-src/geometry.js     warp field: bumps, φ, ∇φ, curvature, geodesic bend
-src/physics.js      balls, cushions, pockets, portals, step(), tracePath()
-src/render.js       pixel buffer, table/balls/aim/HUD/screens, drunk FX
-src/game.js         run state, levels, shop, rules, input, audio, main loop
-experiments/        old sphere-table prototype (reference only)
+index.html            boot + canvas + font + PWA wiring + portrait hint
+manifest.webmanifest  PWA manifest
+sw.js                 service worker (offline app shell; SHELL lists src/*)
+icons/                generated PNG icons (32/192/512)
+tools/mkicons.js      regenerates the icons (pure Node)
+experiments/          old sphere-table prototype (reference only)
+
+src/config.js         every tunable number, the palette, the level table
+src/geometry.js       warp field: bumps, φ, ∇φ, curvature, geodesic bend
+src/physics.js        balls, cushions, zones, pockets, portals, tracePath()
+src/audio.js          the square-wave bar
+src/table.js          pockets, rack, portals, respawns — pure table geometry
+src/specials.js       powered balls: definition, glyph, message, effect
+src/helpers.js        flat patches, bridges, crane, cat, yin-yang
+src/shop.js           THE BAR: stock and purchase effects
+src/render-core.js    buffer, DPR scaling, primitives, text/buttons, frame()
+src/backdrop.js       stars, nebula, gears, jellyfish, equations, goblin
+src/render-table.js   rails, felt, grid, zones, balls, aim, helper animations
+src/render-ui.js      HUD and every full-screen panel
+src/game.js           run state, level assembly, rules, input, main loop
 ```
+
+**Everything lives under one global, `LCB`** — `LCB.Config`, `LCB.Phys`,
+`LCB.Render`, and so on. Files are plain classic scripts (so `file://` still
+works) and each only depends on the ones listed above it; `index.html` and
+`sw.js` both carry that order.
+
+### Where to add things
+
+| To add… | Touch only |
+|---|---|
+| a tuning change, colour, or level | `config.js` |
+| a special ball | one entry in `specials.js` (key, tint, glyph, message, `apply`) plus its key in a tier |
+| a table helper | one entry in `helpers.js` (`place` / `clear` / `update` / `busy`) — the setup menu, the random roll and the busy-check all pick it up automatically |
+| a shop item | one entry in `shop.js` with its own `buy(run)` |
+| a drawing layer | attach to `Render.layers` from a new file |
+
+The renderer exposes its primitives (`fill`, `pixCircle`, `pixRing`, `text`,
+`button`, `hotspot`, `alpha`, `dim`) on `LCB.Render`, so a new drawing module
+needs nothing but the namespace.
 
 Vanilla JS, classic scripts (works over `file://`), zero dependencies.
 `geometry.js` and `physics.js` are window-free and run under Node — see the

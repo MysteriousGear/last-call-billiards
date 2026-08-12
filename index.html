@@ -63,9 +63,19 @@
   <button id="anyway">PLAY ANYWAY</button>
 </div>
 
+<!-- Load order matters: each file only needs the ones above it. -->
+<script src="src/config.js"></script>
 <script src="src/geometry.js"></script>
 <script src="src/physics.js"></script>
-<script src="src/render.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/table.js"></script>
+<script src="src/specials.js"></script>
+<script src="src/helpers.js"></script>
+<script src="src/shop.js"></script>
+<script src="src/render-core.js"></script>
+<script src="src/backdrop.js"></script>
+<script src="src/render-table.js"></script>
+<script src="src/render-ui.js"></script>
 <script src="src/game.js"></script>
 <script>
   document.getElementById("anyway").addEventListener("click", function () {

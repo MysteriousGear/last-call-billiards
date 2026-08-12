@@ -25,8 +25,6 @@ scratch on it, and the night is over.
 - Some balls carry **powers** that fire when potted — cash, an extra shot, a
   new mid-table pocket, portals, or two shots where *every cushion is a
   pocket* (the cue ball included — good luck).
-- From level 2, a pair of balls is **bound together** (marked `2`, joined by
-  a tether): hit one and its twin moves with it.
 - Helpers appear on later tables — flat patches, angled bridges, a crane, a
   bar cat, and a yin-yang that swaps the cue ball with the 8-ball.
 
@@ -75,16 +73,32 @@ See [SPEC.md](SPEC.md) for the full design doc and roadmap.
 
 ## Layout
 
+Everything lives under one global, `LCB`. Files are plain classic scripts —
+no build step, no bundler — and each depends only on the ones above it.
+
 ```
-index.html            boot, canvas, PWA wiring
+src/config.js         every tunable number, palette, level table
 src/geometry.js       warp field: φ, ∇φ, geodesic bend
-src/physics.js        balls, cushions, pockets, portals, aim tracer
-src/render.js         400×225 pixel buffer, drunk post-FX
-src/game.js           run state, levels, shop, rules, input, audio
+src/physics.js        balls, cushions, zones, pockets, portals, aim tracer
+src/audio.js          the square-wave bar
+src/table.js          pockets, rack, portals, respawns
+src/specials.js       powered balls
+src/helpers.js        flat patches, bridges, crane, cat, yin-yang
+src/shop.js           THE BAR
+src/render-core.js    400×225 pixel buffer, DPR scaling, drunk post-FX
+src/backdrop.js       stars, nebula, jellyfish, equations, goblin
+src/render-table.js   rails, felt, grid, balls, aim, helper animations
+src/render-ui.js      HUD and full-screen panels
+src/game.js           run state, level assembly, rules, input, main loop
 tools/mkicons.js      regenerates the PWA icons (pure Node)
 experiments/          the original spherical-table prototype
 ```
 
-`geometry.js` and `physics.js` are DOM-free and run under Node, which is how
-the physics is smoke-tested (fuzzed shots for NaNs, escapes, and shots that
-never come to rest).
+Adding content is meant to be a one-file job: a new special ball is one entry
+in `specials.js`, a new helper is one entry in `helpers.js` (the random roll,
+the dev menu and the busy-check all pick it up), a new shop item is one entry
+in `shop.js`. See [SPEC.md](SPEC.md) for the full table.
+
+`config.js`, `geometry.js` and `physics.js` are DOM-free and run under Node,
+which is how the physics is smoke-tested (fuzzed shots for NaNs, escapes, and
+shots that never come to rest).

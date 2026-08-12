@@ -12,6 +12,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 (function (root) {
   "use strict";
+  var LCB = root.LCB = root.LCB || {};
 
   /** One Gaussian bump of the warp potential. amp may be ±. */
   function bump(x, y, amp, sigma) {
@@ -76,7 +77,7 @@
     return makeField(bumps, scale);
   }
 
-  root.Geo = {
+  LCB.Geo = {
     bump: bump,
     makeField: makeField,
     randomField: randomField,
